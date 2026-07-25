@@ -47,7 +47,7 @@ jobs:
           grep -q "const MIN_SOURCE_VISITS = 20" assets/app-v2.js
           grep -q "item.visits >= MIN_SOURCE_VISITS" assets/app-v2.js
           grep -q "item.visits < MIN_SOURCE_VISITS" assets/app-v2.js
-          grep -q "менее 20 визитов за период исключаются" index.html
+          grep -q "менее чем 20 визитами за период исключаются" index.html
           grep -q "суммарным объёмом менее 20 визитов" README.md
           grep -q "MVP 0.5" index.html
           grep -q "Что умеет версия 0.5" README.md
