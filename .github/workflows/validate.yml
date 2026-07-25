@@ -50,8 +50,9 @@ jobs:
           grep -q "analyzeApiRows" assets/app-v2.js
           grep -q "campaignFilterLabel" assets/api-mode.js
           grep -q "catalog?.campaignFilter" assets/api-mode.js
+          grep -Fq "['prg', 'med', 'mrk']" assets/api-mode.js
           grep -q "В анализ входят только кампании" assets/api-mode.js
-          grep -q "campaign PRG, MED, MRK" assets/api-mode.js
+          grep -Fq 'campaign ${campaignFilterLabel()}' assets/api-mode.js
           grep -q "function scoreDailyDays" assets/app-v2.js
           grep -q "подозрительно низкие отказы" assets/app-v2.js
           grep -q "подозрительно высокое среднее время" assets/app-v2.js
