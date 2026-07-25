@@ -193,7 +193,7 @@
     try {
       const rows = await readRows(file);
       const map = detectMap(Object.keys(rows[0] || {}));
-      coerceClientIdsToText(rows, map);
+      if (kind === 'tech') coerceClientIdsToText(rows, map);
       const missing = REQUIRED[kind].filter((field) => !map[field]);
       state[`${kind}Rows`] = rows;
       state[`${kind}Map`] = map;
@@ -232,7 +232,7 @@
   function renderMapping(kind, map) {
     const container = $(`#${kind}-mapping`);
     const fields = kind === 'ip'
-      ? ['date','source','ip','clientId','visits','users','bounce','time','newShare','qualityConversion','primaryConversion']
+      ? ['date','source','ip','visits','users','bounce','time','newShare','qualityConversion','primaryConversion']
       : ['date','source','clientId','visits','users','bounce','time','newShare','browser','os','device','resolution','qualityConversion','primaryConversion'];
     container.hidden = false;
     container.innerHTML = `<strong>Распознанные поля</strong><div class="mapping-grid">${fields.map((field) => {
@@ -255,7 +255,10 @@
 
   function clearValidationIfReady() {
     if (state.ipRows && state.techRows && REQUIRED.ip.every((field) => state.ipMap?.[field]) && REQUIRED.tech.every((field) => state.techMap?.[field])) {
-      showValidation('Оба файла распознаны, включая дату. Каждый день будет сравниваться с остальными днями того же источника.', false);
+      const clientIdNote = state.techMap?.clientId
+        ? ' ClientID найден в технической выгрузке и будет учитываться только из неё.'
+        : ' ClientID в технической выгрузке не найден; анализ продолжится без ClientID-сигналов.';
+      showValidation(`Оба файла распознаны, включая дату. Каждый день будет сравниваться с остальными днями того же источника.${clientIdNote}`, false);
     }
   }
 
@@ -404,10 +407,10 @@
     target.clientIdVisits += visits;
   }
 
-  function addTechRow(target, row, map, includeClientId = false) {
+  function addTechRow(target, row, map) {
     const visits = addMetrics(target.tech, row, map);
     if (!visits) return;
-    if (includeClientId) addClientId(target, row, map, visits);
+    addClientId(target, row, map, visits);
     const browser = map.browser ? row[map.browser] : 'Не определено';
     const os = map.os ? row[map.os] : 'Не определено';
     const device = map.device ? row[map.device] : 'Не определено';
@@ -419,10 +422,9 @@
     increase(target.profiles, `${browser || '—'} · ${os || '—'} · ${device || '—'} · ${resolution || '—'}`, visits);
   }
 
-  function addIpRow(target, row, map, includeClientId = false) {
+  function addIpRow(target, row, map) {
     const visits = addMetrics(target.ip, row, map);
     if (!visits) return;
-    if (includeClientId) addClientId(target, row, map, visits);
     const ip = String(row[map.ip] || 'Не определено').trim() || 'Не определено';
     increase(target.ips, ip, visits);
     increase(target.subnets, subnetOf(ip), visits);
@@ -432,7 +434,6 @@
   function buildAggregates() {
     const store = new Map();
     let skippedDates = 0;
-    const clientIdSource = state.ipMap?.clientId ? 'ip' : state.techMap?.clientId ? 'tech' : null;
 
     for (const row of state.techRows || []) {
       const rawSource = row[state.techMap.source];
@@ -440,8 +441,8 @@
       const date = parseDate(row[state.techMap.date]);
       if (!date) { skippedDates += 1; continue; }
       const source = getSource(store, sourceName(rawSource));
-      addTechRow(source, row, state.techMap, clientIdSource === 'tech');
-      addTechRow(getDay(source, date), row, state.techMap, clientIdSource === 'tech');
+      addTechRow(source, row, state.techMap);
+      addTechRow(getDay(source, date), row, state.techMap);
     }
 
     for (const row of state.ipRows || []) {
@@ -450,8 +451,8 @@
       const date = parseDate(row[state.ipMap.date]);
       if (!date) { skippedDates += 1; continue; }
       const source = getSource(store, sourceName(rawSource));
-      addIpRow(source, row, state.ipMap, clientIdSource === 'ip');
-      addIpRow(getDay(source, date), row, state.ipMap, clientIdSource === 'ip');
+      addIpRow(source, row, state.ipMap);
+      addIpRow(getDay(source, date), row, state.ipMap);
     }
 
     if (skippedDates) showValidation(`Анализ запущен. Пропущено строк с нераспознанной датой: ${formatInt(skippedDates)}.`, false);
@@ -489,7 +490,7 @@
     const top10ClientShare = topShare(slice.clientIds, clientIdVisits, 10);
     const visitsPerClientId = uniqueClientIds ? clientIdVisits / uniqueClientIds : 0;
     const repeatClientVisitShare = clientIdVisits ? Math.max(0, clientIdVisits - uniqueClientIds) / clientIdVisits : 0;
-    const clientIdCoverage = visits ? Math.min(1, clientIdVisits / visits) : 0;
+    const clientIdCoverage = tech.visits ? Math.min(1, clientIdVisits / tech.visits) : 0;
     const unknownBrowserVisits = [...slice.browsers.entries()]
       .filter(([key]) => /не определ|unknown|undefined|other|другие/i.test(key))
       .reduce((sum, [, value]) => sum + value, 0);
