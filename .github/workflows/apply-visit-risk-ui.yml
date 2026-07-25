@@ -1,0 +1,48 @@
+name: Apply visit-risk UI
+
+on:
+  push:
+    branches:
+      - agent/visit-risk-summary-ui
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/visit-risk-summary-ui
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Apply migration
+        run: python scripts/apply_visit_risk_ui.py
+
+      - name: Validate JavaScript and runtime
+        run: |
+          node --check assets/app-v2.js
+          node --check assets/api-mode.js
+          node --check scripts/validate_api_runtime.js
+          node scripts/validate_api_runtime.js
+          grep -q "function aggregateVisitRisk" assets/app-v2.js
+          grep -q "Подозрительные визиты" assets/app-v2.js
+          grep -q "Оценка конкретных визитов" assets/app-v2.js
+          grep -q "VisitID высокий риск" assets/app-v2.js
+          grep -q "Что умеет версия 0.7" README.md
+
+      - name: Commit applied changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/app-v2.js index.html README.md scripts/validate_api_runtime.js
+          if ! git diff --cached --quiet; then
+            git commit -m "Show aggregated suspicious visit counts"
+            git push origin HEAD:agent/visit-risk-summary-ui
+          fi
