@@ -1,0 +1,52 @@
+name: Restore source anomaly dates
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Restore per-source anomaly date tables
+        run: python scripts/restore_source_anomaly_dates.py
+      - name: Verify global daily table stays hidden
+        run: |
+          ! grep -q "Все дневные срезы" index.html
+          ! grep -q "class=\"daily-table\"" index.html
+      - name: Verify per-source anomaly dates are visible
+        run: |
+          grep -q "class=\"daily-detail\"" assets/app-v2.js
+          grep -q "const dailyRows = row.anomalousDays.length" assets/app-v2.js
+          grep -q "Конкретные аномальные даты" assets/app-v2.js
+      - name: Verify internal daily analysis remains
+        run: |
+          grep -q "function scoreDailyDays" assets/app-v2.js
+          grep -q "const days = scoreDailyDays(source)" assets/app-v2.js
+          grep -q "state.dailyResults = state.results.flatMap" assets/app-v2.js
+      - name: Check JavaScript syntax
+        run: node --check assets/app-v2.js
+      - name: Commit restored interface
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/app-v2.js
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Restore per-source anomaly date tables"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Comment result
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment ${{ github.event.pull_request.number }} --body "Таблицы конкретных аномальных дат возвращены внутрь карточек источников. Общая таблица всех дневных срезов остаётся скрытой. JavaScript и внутренняя дневная логика проверены."
