@@ -58,3 +58,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh pr comment ${{ github.event.pull_request.number }} --body "ClientID подключён к совокупному анализу: концентрация топ-1 и топ-10, визиты на ClientID и дневные отклонения относительно медианы площадки. Если ClientID есть в обеих выгрузках, используется IP-файл, чтобы не удваивать визиты."
+
+# Trigger workflow after PR creation.
