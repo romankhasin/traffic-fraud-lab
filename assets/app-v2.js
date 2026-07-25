@@ -9,6 +9,7 @@
     source: ['utm source','utmsource','источник трафика','источник','площадка','source'],
     campaign: ['utm campaign','utmcampaign','кампания','campaign'],
     ip: ['ip адрес','ip-адрес','ip address','ipaddress','ip'],
+    clientId: ['client id','clientid','client id яндекс метрика','идентификатор клиента','id клиента','ид клиента','ym s clientid','ym s client id'],
     visits: ['визиты','визитов','visits','sessions','сеансы'],
     users: ['посетители','пользователи','users','visitors'],
     bounce: ['отказы','показатель отказов','bounce rate','bouncerate','bounce'],
@@ -23,7 +24,7 @@
   };
 
   const LABELS = {
-    date: 'Дата', source: 'Источник', ip: 'IP', visits: 'Визиты', users: 'Посетители', bounce: 'Отказы', time: 'Время',
+    date: 'Дата', source: 'Источник', ip: 'IP', clientId: 'ClientID', visits: 'Визиты', users: 'Посетители', bounce: 'Отказы', time: 'Время',
     newShare: 'Новые', browser: 'Браузер', os: 'ОС', device: 'Устройство', resolution: 'Разрешение',
     qualityConversion: 'Качественные', primaryConversion: 'Первичные'
   };
@@ -154,8 +155,8 @@
   function renderMapping(kind, map) {
     const container = $(`#${kind}-mapping`);
     const fields = kind === 'ip'
-      ? ['date','source','ip','visits','users','bounce','time','newShare','qualityConversion','primaryConversion']
-      : ['date','source','visits','users','bounce','time','newShare','browser','os','device','resolution','qualityConversion','primaryConversion'];
+      ? ['date','source','ip','clientId','visits','users','bounce','time','newShare','qualityConversion','primaryConversion']
+      : ['date','source','clientId','visits','users','bounce','time','newShare','browser','os','device','resolution','qualityConversion','primaryConversion'];
     container.hidden = false;
     container.innerHTML = `<strong>Распознанные поля</strong><div class="mapping-grid">${fields.map((field) => {
       const value = map[field];
@@ -298,7 +299,7 @@
   function emptySlice() {
     return {
       tech: emptyBucket(), ip: emptyBucket(), browsers: new Map(), os: new Map(), devices: new Map(), resolutions: new Map(), profiles: new Map(),
-      ips: new Map(), subnets: new Map(), ipv6Visits: 0
+      ips: new Map(), subnets: new Map(), clientIds: new Map(), clientIdVisits: 0, ipv6Visits: 0
     };
   }
 
@@ -312,9 +313,24 @@
     return source.days.get(date);
   }
 
-  function addTechRow(target, row, map) {
+  function validClientId(value) {
+    const clientId = String(value ?? '').trim();
+    if (!clientId || /^(не определено|undefined|none|not set|\(not set\)|0)$/i.test(clientId)) return '';
+    return clientId;
+  }
+
+  function addClientId(target, row, map, visits) {
+    if (!map.clientId || !visits) return;
+    const clientId = validClientId(row[map.clientId]);
+    if (!clientId) return;
+    increase(target.clientIds, clientId, visits);
+    target.clientIdVisits += visits;
+  }
+
+  function addTechRow(target, row, map, includeClientId = false) {
     const visits = addMetrics(target.tech, row, map);
     if (!visits) return;
+    if (includeClientId) addClientId(target, row, map, visits);
     const browser = map.browser ? row[map.browser] : 'Не определено';
     const os = map.os ? row[map.os] : 'Не определено';
     const device = map.device ? row[map.device] : 'Не определено';
@@ -326,9 +342,10 @@
     increase(target.profiles, `${browser || '—'} · ${os || '—'} · ${device || '—'} · ${resolution || '—'}`, visits);
   }
 
-  function addIpRow(target, row, map) {
+  function addIpRow(target, row, map, includeClientId = false) {
     const visits = addMetrics(target.ip, row, map);
     if (!visits) return;
+    if (includeClientId) addClientId(target, row, map, visits);
     const ip = String(row[map.ip] || 'Не определено').trim() || 'Не определено';
     increase(target.ips, ip, visits);
     increase(target.subnets, subnetOf(ip), visits);
@@ -338,6 +355,7 @@
   function buildAggregates() {
     const store = new Map();
     let skippedDates = 0;
+    const clientIdSource = state.ipMap?.clientId ? 'ip' : state.techMap?.clientId ? 'tech' : null;
 
     for (const row of state.techRows || []) {
       const rawSource = row[state.techMap.source];
@@ -345,8 +363,8 @@
       const date = parseDate(row[state.techMap.date]);
       if (!date) { skippedDates += 1; continue; }
       const source = getSource(store, sourceName(rawSource));
-      addTechRow(source, row, state.techMap);
-      addTechRow(getDay(source, date), row, state.techMap);
+      addTechRow(source, row, state.techMap, clientIdSource === 'tech');
+      addTechRow(getDay(source, date), row, state.techMap, clientIdSource === 'tech');
     }
 
     for (const row of state.ipRows || []) {
@@ -355,8 +373,8 @@
       const date = parseDate(row[state.ipMap.date]);
       if (!date) { skippedDates += 1; continue; }
       const source = getSource(store, sourceName(rawSource));
-      addIpRow(source, row, state.ipMap);
-      addIpRow(getDay(source, date), row, state.ipMap);
+      addIpRow(source, row, state.ipMap, clientIdSource === 'ip');
+      addIpRow(getDay(source, date), row, state.ipMap, clientIdSource === 'ip');
     }
 
     if (skippedDates) showValidation(`Анализ запущен. Пропущено строк с нераспознанной датой: ${formatInt(skippedDates)}.`, false);
@@ -372,6 +390,12 @@
     return { key, value, share: total ? value / total : 0 };
   }
 
+  function topShare(map, total, limit = 10) {
+    if (!total || !map.size) return 0;
+    const values = [...map.values()].sort((a, b) => b - a).slice(0, limit);
+    return values.reduce((sum, value) => sum + value, 0) / total;
+  }
+
   function snapshot(slice) {
     const tech = finishBucket(slice.tech);
     const ip = finishBucket(slice.ip);
@@ -382,12 +406,20 @@
     const topProfile = topEntry(slice.profiles, tech.visits);
     const topIp = topEntry(slice.ips, ip.visits);
     const topSubnet = topEntry(slice.subnets, ip.visits);
+    const clientIdVisits = slice.clientIdVisits || 0;
+    const uniqueClientIds = slice.clientIds.size;
+    const topClientId = topEntry(slice.clientIds, clientIdVisits);
+    const top10ClientShare = topShare(slice.clientIds, clientIdVisits, 10);
+    const visitsPerClientId = uniqueClientIds ? clientIdVisits / uniqueClientIds : 0;
+    const repeatClientVisitShare = clientIdVisits ? Math.max(0, clientIdVisits - uniqueClientIds) / clientIdVisits : 0;
+    const clientIdCoverage = visits ? Math.min(1, clientIdVisits / visits) : 0;
     const unknownBrowserVisits = [...slice.browsers.entries()]
       .filter(([key]) => /не определ|unknown|undefined|other|другие/i.test(key))
       .reduce((sum, [, value]) => sum + value, 0);
     const browserText = [...slice.browsers.keys()].join(' ').toLowerCase();
     return {
       visits, tech, ip, metrics, topBrowser, topResolution, topProfile, topIp, topSubnet,
+      clientIdVisits, uniqueClientIds, topClientId, top10ClientShare, visitsPerClientId, repeatClientVisitShare, clientIdCoverage,
       ipv6Share: ip.visits ? slice.ipv6Visits / ip.visits : 0,
       unknownBrowserShare: tech.visits ? unknownBrowserVisits / tech.visits : 0,
       automation: /headless|phantom|selenium|webdriver/.test(browserText)
@@ -440,6 +472,18 @@
     if (data.topSubnet.share >= .35 && data.ip.visits >= 500) { score += 22; reasons.push('высокая концентрация подсети'); }
     else if (data.topSubnet.share >= .18 && data.ip.visits >= 500) { score += 14; reasons.push('концентрация подсети'); }
 
+    let clientIdScore = 0;
+    const enoughClientIds = data.clientIdVisits >= 300 && data.clientIdCoverage >= .5 && data.uniqueClientIds >= 20;
+    if (enoughClientIds) {
+      if (data.topClientId.share >= .3 && data.topClientId.value >= 100) { clientIdScore += 18; reasons.push(`один ClientID дал ${formatPct(data.topClientId.share)} визитов за период`); }
+      else if (data.topClientId.share >= .15 && data.topClientId.value >= 50) { clientIdScore += 10; reasons.push('повышенная концентрация одного ClientID'); }
+      if (data.top10ClientShare >= .8) { clientIdScore += 14; reasons.push(`топ-10 ClientID дали ${formatPct(data.top10ClientShare)} визитов`); }
+      else if (data.top10ClientShare >= .6) { clientIdScore += 8; reasons.push('повышенная концентрация топ-10 ClientID'); }
+      if (data.visitsPerClientId >= 12) { clientIdScore += 14; reasons.push(`в среднем ${data.visitsPerClientId.toFixed(1)} визита на ClientID`); }
+      else if (data.visitsPerClientId >= 6) { clientIdScore += 8; reasons.push('много повторных визитов на один ClientID'); }
+    }
+    score += Math.min(28, clientIdScore);
+
     if (data.visits < 100) score = Math.min(score, 24);
     else if (data.visits < 500) score = Math.min(score, 44);
     return { ...data, score: Math.min(100, Math.round(score)), reasons };
@@ -454,6 +498,8 @@
     return rawDays.map((day) => {
       const others = rawDays.filter((candidate) => candidate.date !== day.date);
       const sample = (getter) => others.map(getter).filter(Number.isFinite);
+      const clientPeers = others.filter((item) => item.clientIdVisits >= 100 && item.clientIdCoverage >= .5 && item.uniqueClientIds >= 10);
+      const clientSample = (getter) => clientPeers.map(getter).filter(Number.isFinite);
       const baseline = {
         visits: median(sample((item) => item.visits)),
         bounce: median(sample((item) => item.metrics.bounce)),
@@ -464,7 +510,12 @@
         topIp: median(sample((item) => item.topIp.share)),
         topSubnet: median(sample((item) => item.topSubnet.share)),
         topProfile: median(sample((item) => item.topProfile.share)),
-        unknownBrowser: median(sample((item) => item.unknownBrowserShare))
+        unknownBrowser: median(sample((item) => item.unknownBrowserShare)),
+        clientIdVisits: median(clientSample((item) => item.clientIdVisits)),
+        uniqueClientIds: median(clientSample((item) => item.uniqueClientIds)),
+        topClientId: median(clientSample((item) => item.topClientId.share)),
+        top10ClientShare: median(clientSample((item) => item.top10ClientShare)),
+        visitsPerClientId: median(clientSample((item) => item.visitsPerClientId))
       };
 
       const reasons = [];
@@ -531,6 +582,25 @@
         const profileDiff = day.topProfile.share - baseline.topProfile;
         if (day.topProfile.share >= .7 && profileDiff >= .15) { score += 19; reasons.push(`техпрофиль занял ${formatPct(day.topProfile.share)} трафика`); }
         else if (day.topProfile.share >= .45 && robustZ(day.topProfile.share, sample((item) => item.topProfile.share), .025) >= 3) { score += 11; reasons.push('однодневная концентрация техпрофиля'); }
+
+        let clientIdScore = 0;
+        const enoughClientHistory = clientPeers.length >= 6;
+        const enoughClientVolume = day.clientIdVisits >= Math.max(200, baseline.clientIdVisits * .15) && day.clientIdCoverage >= .5 && day.uniqueClientIds >= 10;
+        if (enoughClientHistory && enoughClientVolume) {
+          const topClientDiff = day.topClientId.share - baseline.topClientId;
+          const topClientZ = robustZ(day.topClientId.share, clientSample((item) => item.topClientId.share), .02);
+          if (day.topClientId.share >= .25 && topClientDiff >= .12 && topClientZ >= 3.5 && day.topClientId.value >= 50) { clientIdScore += 18; reasons.push(`один ClientID дал ${formatPct(day.topClientId.share)} визитов в этот день`); }
+          else if (day.topClientId.share >= .12 && topClientDiff >= .06 && topClientZ >= 3) { clientIdScore += 10; reasons.push('однодневный рост концентрации одного ClientID'); }
+          const top10Diff = day.top10ClientShare - baseline.top10ClientShare;
+          const top10Z = robustZ(day.top10ClientShare, clientSample((item) => item.top10ClientShare), .03);
+          if (day.top10ClientShare >= .75 && top10Diff >= .2 && top10Z >= 3.5) { clientIdScore += 14; reasons.push(`топ-10 ClientID дали ${formatPct(day.top10ClientShare)} дневных визитов`); }
+          else if (day.top10ClientShare >= .55 && top10Diff >= .12 && top10Z >= 3) { clientIdScore += 8; reasons.push('аномальная концентрация топ-10 ClientID'); }
+          const visitsPerClientRatio = ratio(day.visitsPerClientId, baseline.visitsPerClientId);
+          const visitsPerClientZ = robustZ(day.visitsPerClientId, clientSample((item) => item.visitsPerClientId), .5);
+          if (day.visitsPerClientId >= 8 && visitsPerClientRatio >= 2.5 && visitsPerClientZ >= 3.5) { clientIdScore += 16; reasons.push(`аномально много повторов: ${day.visitsPerClientId.toFixed(1)} визита на ClientID`); }
+          else if (day.visitsPerClientId >= 5 && visitsPerClientRatio >= 1.8 && visitsPerClientZ >= 3) { clientIdScore += 9; reasons.push('рост повторных визитов на ClientID'); }
+        }
+        score += Math.min(28, clientIdScore);
 
         if (day.automation) { score += 28; reasons.push('в этот день появился automation/headless браузер'); }
         const unknownDiff = day.unknownBrowserShare - baseline.unknownBrowser;
@@ -730,8 +800,8 @@
   function renderSourceCard(row, index) {
     const reasons = row.reasons.length ? row.reasons : ['критичных сочетаний признаков не найдено'];
     const dailyRows = row.anomalousDays.length
-      ? row.anomalousDays.map((day) => `<tr><td>${escapeHtml(formatDate(day.date))}</td><td>${formatInt(day.visits)}</td><td>${formatPct(day.metrics.bounce)}</td><td>${formatDuration(day.metrics.time)}</td><td><span class="risk-pill ${day.risk}">${day.score}/100</span></td><td>${escapeHtml(day.reasons.slice(0, 3).join(' · '))}</td></tr>`).join('')
-      : '<tr><td colspan="6">Аномальных дней с достаточной выборкой не найдено.</td></tr>';
+      ? row.anomalousDays.map((day) => `<tr><td>${escapeHtml(formatDate(day.date))}</td><td>${formatInt(day.visits)}</td><td>${formatPct(day.metrics.bounce)}</td><td>${formatDuration(day.metrics.time)}</td><td>${day.clientIdVisits ? `${formatInt(day.uniqueClientIds)} / ${formatPct(day.topClientId.share)}` : '—'}</td><td><span class="risk-pill ${day.risk}">${day.score}/100</span></td><td>${escapeHtml(day.reasons.slice(0, 3).join(' · '))}</td></tr>`).join('')
+      : '<tr><td colspan="7">Аномальных дней с достаточной выборкой не найдено.</td></tr>';
     return `<details class="source-card ${row.risk}" id="source-${slug(row.name)}" data-risk="${row.risk}" data-name="${escapeHtml(row.name.toLowerCase())}" data-scope="source-card" ${index < 3 || row.risk !== 'low' ? 'open' : ''}>
       <summary>
         <div><span class="section-kicker">UTM Source</span><h3>${escapeHtml(row.name)}</h3><p>${escapeHtml(reasons.slice(0, 4).join(' · '))}</p></div>
@@ -746,11 +816,12 @@
           <div><strong>${formatPct(row.metrics.bounce)}</strong><span>отказы</span></div>
           <div><strong>${escapeHtml(row.confidence)}</strong><span>уверенность</span></div>
         </div>
-        <section class="daily-detail"><h4>Конкретные аномальные даты</h4><div class="table-wrap mini-table-wrap"><table class="mini-table"><thead><tr><th>Дата</th><th>Визиты</th><th>Отказы</th><th>Время</th><th>Score</th><th>Причины</th></tr></thead><tbody>${dailyRows}</tbody></table></div></section>
+        <section class="daily-detail"><h4>Конкретные аномальные даты</h4><div class="table-wrap mini-table-wrap"><table class="mini-table"><thead><tr><th>Дата</th><th>Визиты</th><th>Отказы</th><th>Время</th><th>ClientID: уник. / топ-1</th><th>Score</th><th>Причины</th></tr></thead><tbody>${dailyRows}</tbody></table></div></section>
         <div class="detail-grid">
           <section class="detail"><h4>Почему такой score</h4><ul class="flag-list">${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul></section>
           <section class="detail"><h4>IP и подсети за период</h4><p><b>Топ IP:</b> ${escapeHtml(maskIp(row.topIp.key))} · ${formatPct(row.topIp.share)}</p><p><b>Топ подсеть:</b> ${escapeHtml(row.topSubnet.key)} · ${formatPct(row.topSubnet.share)}</p></section>
           <section class="detail"><h4>Технический профиль</h4><p><b>Топ браузер:</b> ${escapeHtml(row.topBrowser.key)} · ${formatPct(row.topBrowser.share)}</p><p><b>Топ связка:</b> ${escapeHtml(shorten(row.topProfile.key, 100))} · ${formatPct(row.topProfile.share)}</p></section>
+          <section class="detail"><h4>ClientID за период</h4>${row.clientIdVisits ? `<p><b>Покрытие:</b> ${formatPct(row.clientIdCoverage)}</p><p><b>Уникальных ClientID:</b> ${formatInt(row.uniqueClientIds)}</p><p><b>Визитов на ClientID:</b> ${row.visitsPerClientId.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p><p><b>Топ-1 / топ-10:</b> ${formatPct(row.topClientId.share)} / ${formatPct(row.top10ClientShare)}</p>` : '<p>ClientID не найден в загруженных выгрузках.</p>'}</section>
           <section class="detail"><h4>Покрытие</h4><p><b>Техническая выгрузка:</b> ${formatInt(row.tech.visits)} визитов</p><p><b>IP-выгрузка:</b> ${formatInt(row.ip.visits)} визитов</p><p><b>Дней:</b> ${row.days.length}</p></section>
           <section class="detail detail--action"><h4>Рекомендация</h4><p>${escapeHtml(row.action)}</p></section>
         </div>
@@ -786,10 +857,11 @@
 
   function exportCsv() {
     if (!state.dailyResults.length) return;
-    const headers = ['Дата','Месяц','Источник','Визиты','Обычный дневной объём','Отказы','Обычные отказы','Время, сек','Обычное время, сек','Топ IP, доля','Топ подсеть, доля','Топ техпрофиль, доля','Risk score','Уровень','Уверенность','Визиты под проверкой','Причины'];
+    const headers = ['Дата','Месяц','Источник','Визиты','Обычный дневной объём','Отказы','Обычные отказы','Время, сек','Обычное время, сек','Топ IP, доля','Топ подсеть, доля','Топ техпрофиль, доля','ClientID, покрытие','Уникальные ClientID','Визитов на ClientID','Топ-1 ClientID, доля','Обычная доля топ-1 ClientID','Топ-10 ClientID, доля','Обычная доля топ-10 ClientID','Risk score','Уровень','Уверенность','Визиты под проверкой','Причины'];
     const rows = state.dailyResults.map((day) => [
       day.date, day.month, day.source, day.visits, day.baseline.visits, day.metrics.bounce, day.baseline.bounce, day.metrics.time, day.baseline.time,
-      day.topIp.share, day.topSubnet.share, day.topProfile.share, day.score, riskLabel(day.risk), day.confidence, day.flaggedVisits, day.reasons.join('; ')
+      day.topIp.share, day.topSubnet.share, day.topProfile.share, day.clientIdCoverage, day.uniqueClientIds, day.visitsPerClientId, day.topClientId.share, day.baseline.topClientId, day.top10ClientShare, day.baseline.top10ClientShare,
+      day.score, riskLabel(day.risk), day.confidence, day.flaggedVisits, day.reasons.join('; ')
     ]);
     const csv = '\uFEFF' + [headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });

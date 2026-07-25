@@ -49,3 +49,21 @@ jobs:
           ! grep -q "assets/pdf-export.js" index.html
           ! grep -q "html2canvas" index.html
           ! grep -q "jspdf" index.html
+      - name: Check ClientID analysis
+        run: |
+          grep -q "clientId: \['client id'" assets/app-v2.js
+          grep -q "const clientIdSource = state.ipMap?.clientId ? 'ip'" assets/app-v2.js
+          grep -q "clientIds: new Map()" assets/app-v2.js
+          grep -q "function addClientId" assets/app-v2.js
+          grep -q "function topShare" assets/app-v2.js
+          grep -q "top10ClientShare" assets/app-v2.js
+          grep -q "data.clientIdCoverage >= .5" assets/app-v2.js
+          grep -q "clientPeers.length >= 6" assets/app-v2.js
+          grep -q "score += Math.min(28, clientIdScore)" assets/app-v2.js
+          grep -q "ClientID за период" assets/app-v2.js
+          grep -q "ClientID: уник. / топ-1" assets/app-v2.js
+          grep -q "Уникальные ClientID" assets/app-v2.js
+          grep -q "IP + ClientID" index.html
+          grep -q "ClientID не отправляются на сервер" index.html
+          grep -q "MVP 0.4" index.html
+          grep -q "Что умеет версия 0.4" README.md
