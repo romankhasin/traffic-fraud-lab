@@ -23,6 +23,7 @@ jobs:
           test -f assets/app-v2.js
           test ! -f assets/pdf.css
           test ! -f assets/pdf-export.js
+          test ! -f scripts/apply_csv_text_parser.py
           grep -q "assets/styles.css" index.html
           grep -q "assets/daily.css" index.html
           grep -q "assets/app-v2.js" index.html
@@ -67,9 +68,11 @@ jobs:
           grep -q "ClientID не отправляются на сервер" index.html
       - name: Check ClientID text parsing and source filter
         run: |
-          grep -q "cellDates: true, raw: true" assets/app-v2.js
+          grep -q "function parseCsvRows" assets/app-v2.js
+          grep -q "rows = parseCsvRows(await file.text())" assets/app-v2.js
+          grep -q "String(cells\[index\] ?? '')" assets/app-v2.js
+          grep -q "raw: false" assets/app-v2.js
           grep -q "function coerceClientIdsToText" assets/app-v2.js
-          grep -q "String(value).trim()" assets/app-v2.js
           grep -q "coerceClientIdsToText(rows, map)" assets/app-v2.js
           grep -q "const MIN_SOURCE_VISITS = 20" assets/app-v2.js
           grep -q "item.visits >= MIN_SOURCE_VISITS" assets/app-v2.js
