@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Локальная проверка выгрузок Яндекс Метрики на признаки фрода и низкокачественного трафика">
+  <title>Traffic Fraud Lab · Level Digital Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="hub-nav">
+    <div class="hub-nav__inner">
+      <a class="hub-brand" href="https://romankhasin.github.io/-level-group-dashboard/portal/">
+        <span class="hub-brand__mark">LG</span>
+        <span><strong>Digital Hub</strong><small>Level Group tools</small></span>
+      </a>
+      <nav class="hub-links" aria-label="Навигация по Level Digital Hub">
+        <a href="https://romankhasin.github.io/-level-group-dashboard/portal/">Главная</a>
+        <a href="https://romankhasin.github.io/-level-group-dashboard/dashboard/">Статистика</a>
+        <a href="https://creative-quality-checker-one.vercel.app/">Креативы</a>
+        <a href="https://romankhasin.github.io/level-realty-radar-new/">Новости</a>
+        <a class="active" href="./" aria-current="page">Фрод-анализ</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="shell hero__grid">
+      <div>
+        <div class="eyebrow">Level Group · Traffic Quality</div>
+        <h1>Traffic Fraud Lab</h1>
+        <p class="hero__lead">Загрузите две выгрузки Яндекс Метрики. Инструмент объединит данные по источникам, найдёт поведенческие, IP- и технические аномалии и сформирует прозрачный рейтинг риска.</p>
+        <div class="hero__chips">
+          <span>CSV / XLSX</span>
+          <span>Risk score 0–100</span>
+          <span>Локальная обработка</span>
+        </div>
+      </div>
+      <aside class="privacy-card">
+        <span class="privacy-card__icon" aria-hidden="true">✓</span>
+        <div>
+          <strong>Данные остаются на устройстве</strong>
+          <p>Файлы читаются браузером. Исходные строки и IP-адреса не отправляются на сервер.</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <main class="shell main">
+    <section class="panel" id="upload-section">
+      <div class="section-head">
+        <div>
+          <span class="section-kicker">Шаг 1</span>
+          <h2>Загрузите выгрузки</h2>
+          <p>Названия столбцов могут немного отличаться — система попробует сопоставить их автоматически.</p>
+        </div>
+        <button class="button button--ghost" id="demo-button" type="button">Показать демо</button>
+      </div>
+
+      <div class="upload-grid">
+        <article class="upload-card" id="ip-card">
+          <div class="upload-card__top">
+            <span class="upload-card__number">01</span>
+            <span class="status-pill" id="ip-status">Файл не выбран</span>
+          </div>
+          <h3>Источник + IP</h3>
+          <p>UTM Source, IP-адрес, визиты, отказы, время и при наличии конверсии.</p>
+          <label class="file-picker">
+            <input id="ip-file" type="file" accept=".csv,.xlsx,.xls">
+            <span>Выбрать IP-выгрузку</span>
+          </label>
+          <div class="file-meta" id="ip-meta">Поддерживаются CSV, XLSX и XLS.</div>
+          <div class="mapping" id="ip-mapping" hidden></div>
+        </article>
+
+        <article class="upload-card" id="tech-card">
+          <div class="upload-card__top">
+            <span class="upload-card__number">02</span>
+            <span class="status-pill" id="tech-status">Файл не выбран</span>
+          </div>
+          <h3>Источник + техника</h3>
+          <p>Браузер, ОС, устройство, разрешение, визиты, отказы и время.</p>
+          <label class="file-picker">
+            <input id="tech-file" type="file" accept=".csv,.xlsx,.xls">
+            <span>Выбрать техническую выгрузку</span>
+          </label>
+          <div class="file-meta" id="tech-meta">Поддерживаются CSV, XLSX и XLS.</div>
+          <div class="mapping" id="tech-mapping" hidden></div>
+        </article>
+      </div>
+
+      <div class="validation" id="validation" hidden></div>
+      <div class="actions-row">
+        <button class="button button--primary" id="analyze-button" type="button" disabled>Запустить анализ</button>
+        <button class="button button--ghost" id="reset-button" type="button">Очистить</button>
+        <span class="actions-row__note">Для полноценной проверки нужны оба файла.</span>
+      </div>
+    </section>
+
+    <section class="results" id="results" hidden>
+      <div class="section-head section-head--results">
+        <div>
+          <span class="section-kicker">Результат</span>
+          <h2>Обзор качества трафика</h2>
+          <p id="summary-text">Расчёт завершён.</p>
+        </div>
+        <button class="button button--ghost" id="export-button" type="button">Скачать CSV</button>
+      </div>
+
+      <div class="kpi-grid" id="kpi-grid"></div>
+
+      <section class="conclusion" id="conclusion"></section>
+
+      <section class="panel panel--compact">
+        <div class="toolbar">
+          <div class="filter-group" role="group" aria-label="Фильтр риска">
+            <button class="filter-button active" type="button" data-risk="all">Все</button>
+            <button class="filter-button" type="button" data-risk="high">Высокий</button>
+            <button class="filter-button" type="button" data-risk="medium">Требует проверки</button>
+            <button class="filter-button" type="button" data-risk="low">Низкий</button>
+          </div>
+          <input class="search-input" id="source-search" type="search" placeholder="Поиск по источнику">
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Источник</th>
+                <th>Визиты</th>
+                <th>Отказы</th>
+                <th>Время</th>
+                <th>Топ подсеть</th>
+                <th>Топ техпрофиль</th>
+                <th>Риск</th>
+                <th>Score</th>
+              </tr>
+            </thead>
+            <tbody id="source-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="source-list" id="source-list"></section>
+    </section>
+
+    <section class="method panel" id="methodology">
+      <div class="section-head">
+        <div>
+          <span class="section-kicker">Методика</span>
+          <h2>Как формируется оценка</h2>
+          <p>Высокий риск появляется только при сочетании нескольких независимых признаков. Один высокий отказ или одна подсеть сами по себе не доказывают фрод.</p>
+        </div>
+      </div>
+      <div class="method-grid">
+        <article><span>01</span><h3>Поведение</h3><p>Отказы, время на сайте, доля новых пользователей и отклонение от общего уровня.</p></article>
+        <article><span>02</span><h3>IP и подсети</h3><p>Концентрация визитов на одном IP, IPv4 /24 и приближённой IPv6 /64.</p></article>
+        <article><span>03</span><h3>Техника</h3><p>Headless, unknown, однотипные браузеры, ОС, устройства и разрешения.</p></article>
+        <article><span>04</span><h3>Конверсии</h3><p>Отсутствие качественных действий или аномальные значения относительно общей базы.</p></article>
+      </div>
+      <div class="method-note"><strong>Важно:</strong> score используется для приоритизации ручной проверки и запроса детализации у площадки. Он не является юридическим доказательством фрода.</div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell footer-inner">
+      <span><strong>Traffic Fraud Lab</strong> · Level Digital Hub</span>
+      <span>MVP 0.1 · локальная обработка</span>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
