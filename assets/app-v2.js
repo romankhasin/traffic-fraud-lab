@@ -708,9 +708,6 @@
 
   function renderSourceCard(row, index) {
     const reasons = row.reasons.length ? row.reasons : ['критичных сочетаний признаков не найдено'];
-    const dailyRows = row.anomalousDays.length
-      ? row.anomalousDays.map((day) => `<tr><td>${escapeHtml(formatDate(day.date))}</td><td>${formatInt(day.visits)}</td><td>${formatPct(day.metrics.bounce)}</td><td>${formatDuration(day.metrics.time)}</td><td><span class="risk-pill ${day.risk}">${day.score}/100</span></td><td>${escapeHtml(day.reasons.slice(0, 3).join(' · '))}</td></tr>`).join('')
-      : '<tr><td colspan="6">Аномальных дней с достаточной выборкой не найдено.</td></tr>';
     return `<details class="source-card ${row.risk}" id="source-${slug(row.name)}" data-risk="${row.risk}" data-name="${escapeHtml(row.name.toLowerCase())}" data-scope="source-card" ${index < 3 || row.risk !== 'low' ? 'open' : ''}>
       <summary>
         <div><span class="section-kicker">UTM Source</span><h3>${escapeHtml(row.name)}</h3><p>${escapeHtml(reasons.slice(0, 4).join(' · '))}</p></div>
@@ -725,7 +722,6 @@
           <div><strong>${formatPct(row.metrics.bounce)}</strong><span>отказы</span></div>
           <div><strong>${escapeHtml(row.confidence)}</strong><span>уверенность</span></div>
         </div>
-        <section class="daily-detail"><h4>Аномальные дни</h4><div class="table-wrap mini-table-wrap"><table class="mini-table"><thead><tr><th>Дата</th><th>Визиты</th><th>Отказы</th><th>Время</th><th>Score</th><th>Причины</th></tr></thead><tbody>${dailyRows}</tbody></table></div></section>
         <div class="detail-grid">
           <section class="detail"><h4>Почему такой score</h4><ul class="flag-list">${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul></section>
           <section class="detail"><h4>IP и подсети за период</h4><p><b>Топ IP:</b> ${escapeHtml(maskIp(row.topIp.key))} · ${formatPct(row.topIp.share)}</p><p><b>Топ подсеть:</b> ${escapeHtml(row.topSubnet.key)} · ${formatPct(row.topSubnet.share)}</p></section>
