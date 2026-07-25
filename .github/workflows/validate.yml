@@ -5,7 +5,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   validate:
@@ -13,6 +14,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Apply ClientID update
+        run: python scripts/apply_client_id_analysis.py
       - name: Check JavaScript syntax
         run: node --check assets/app-v2.js
       - name: Check required files and analysis logic
@@ -49,3 +54,27 @@ jobs:
           ! grep -q "assets/pdf-export.js" index.html
           ! grep -q "html2canvas" index.html
           ! grep -q "jspdf" index.html
+      - name: Check ClientID analysis
+        run: |
+          grep -q "clientId: \['client id'" assets/app-v2.js
+          grep -q "const clientIdSource = state.ipMap?.clientId ? 'ip'" assets/app-v2.js
+          grep -q "clientIds: new Map()" assets/app-v2.js
+          grep -q "function addClientId" assets/app-v2.js
+          grep -q "function topShare" assets/app-v2.js
+          grep -q "top10ClientShare" assets/app-v2.js
+          grep -q "data.clientIdCoverage >= .5" assets/app-v2.js
+          grep -q "clientPeers.length >= 6" assets/app-v2.js
+          grep -q "score += Math.min(28, clientIdScore)" assets/app-v2.js
+          grep -q "ClientID за период" assets/app-v2.js
+          grep -q "ClientID: уник. / топ-1" assets/app-v2.js
+          grep -q "Уникальные ClientID" assets/app-v2.js
+          grep -q "Что умеет версия 0.4" README.md
+      - name: Commit application changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/app-v2.js index.html README.md
+          if ! git diff --cached --quiet; then
+            git commit -m "Add ClientID signals to fraud analysis"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
