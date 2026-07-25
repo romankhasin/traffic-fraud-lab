@@ -38,7 +38,7 @@ jobs:
           test ! -f .github/workflows/apply-visit-risk-ui.yml
           test ! -f scripts/.visit-risk-ui-trigger
 
-      - name: Check API controls and existing fraud rules
+      - name: Check API controls and campaign filter
         run: |
           test -f assets/api.css
           test -f assets/api-mode.js
@@ -48,6 +48,11 @@ jobs:
           grep -q "api-date-to" index.html
           grep -q "api-analyze-button" index.html
           grep -q "analyzeApiRows" assets/app-v2.js
+          grep -q "campaignFilterLabel" assets/api-mode.js
+          grep -q "catalog?.campaignFilter" assets/api-mode.js
+          grep -Fq "['prg', 'med', 'mrk']" assets/api-mode.js
+          grep -q "В анализ входят только кампании" assets/api-mode.js
+          grep -Fq 'campaign ${campaignFilterLabel()}' assets/api-mode.js
           grep -q "function scoreDailyDays" assets/app-v2.js
           grep -q "подозрительно низкие отказы" assets/app-v2.js
           grep -q "подозрительно высокое среднее время" assets/app-v2.js

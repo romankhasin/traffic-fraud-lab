@@ -25,6 +25,13 @@
       : date.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' });
   };
 
+  const campaignFilterLabel = () => {
+    const tokens = Array.isArray(catalog?.campaignFilter) && catalog.campaignFilter.length
+      ? catalog.campaignFilter
+      : ['prg', 'med', 'mrk'];
+    return tokens.map((token) => String(token).toUpperCase()).join(', ');
+  };
+
   const status = (message, kind = 'info') => {
     ui.status.className = `api-status api-status--${kind}`;
     ui.status.textContent = message;
@@ -68,7 +75,7 @@
     ui.dateTo.value = maxDate;
     ui.dateFrom.value = maxDate ? (addDays(maxDate, -13) < minDate ? minDate : addDays(maxDate, -13)) : '';
     ui.generated.textContent = catalog.generatedAt
-      ? `Данные обновлены ${formatDateTime(catalog.generatedAt)} · доступны по ${catalog.dataThrough || maxDate}`
+      ? `Данные обновлены ${formatDateTime(catalog.generatedAt)} · доступны по ${catalog.dataThrough || maxDate} · campaign: ${campaignFilterLabel()}`
       : '';
     ui.counters.querySelectorAll('input').forEach((input) => input.addEventListener('change', updateButton));
     updateButton();
@@ -84,7 +91,7 @@
         throw new Error('в каталоге пока нет подготовленных счётчиков');
       }
       renderCounters();
-      status('Выберите счётчик и период. Анализ выполняется по полным дневным агрегатам Logs API.', 'ready');
+      status(`Выберите счётчик и период. В анализ входят только кампании, содержащие ${campaignFilterLabel()}.`, 'ready');
     } catch (error) {
       catalog = null;
       updateButton();
@@ -142,12 +149,12 @@
       const counterLabel = selected.map((counter) => `${counter.name || 'Счётчик'} (${counter.id})`).join(', ');
       window.FraudLab.analyzeApiRows(rows, {
         mode: 'api',
-        label: `Logs API · ${counterLabel} · ${from} — ${to}`,
+        label: `Logs API · ${counterLabel} · ${from} — ${to} · campaign ${campaignFilterLabel()}`,
         generatedAt: catalog.generatedAt
       });
       status(
         `Готово: ${formatInt(rows.reduce((sum, row) => sum + (Number(row.visits) || 0), 0))} визитов, `
-        + `${new Set(rows.map((row) => row.date)).size} дней, ${selected.length} ${selected.length === 1 ? 'счётчик' : 'счётчика'}.`,
+        + `${new Set(rows.map((row) => row.date)).size} дней, ${selected.length} ${selected.length === 1 ? 'счётчик' : 'счётчика'} · campaign ${campaignFilterLabel()}.`,
         'ready'
       );
     } catch (error) {
