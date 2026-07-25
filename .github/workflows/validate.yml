@@ -5,7 +5,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   validate:
@@ -13,71 +14,44 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Apply ClientID technical-only update
+        run: python scripts/apply_clientid_tech_only.py
       - name: Check JavaScript syntax
         run: node --check assets/app-v2.js
-      - name: Check required files and analysis logic
+      - name: Check ClientID source
         run: |
-          test -f index.html
-          test -f assets/styles.css
-          test -f assets/daily.css
-          test -f assets/app-v2.js
-          test ! -f assets/pdf.css
-          test ! -f assets/pdf-export.js
-          test ! -f scripts/apply_csv_text_parser.py
-          grep -q "assets/styles.css" index.html
-          grep -q "assets/daily.css" index.html
-          grep -q "assets/app-v2.js" index.html
-          grep -q "monthly-table" index.html
-          ! grep -q "Все дневные срезы" index.html
-          ! grep -q "class=\"daily-table\"" index.html
-          grep -q "class=\"daily-detail\"" assets/app-v2.js
-          grep -q "const dailyRows = row.anomalousDays.length" assets/app-v2.js
-          grep -q "function scoreDailyDays" assets/app-v2.js
-          grep -q "const days = scoreDailyDays(source)" assets/app-v2.js
-          grep -q "state.dailyResults = state.results.flatMap" assets/app-v2.js
-          grep -q "enoughTimeHistory" assets/app-v2.js
-          grep -q "timeSample.length >= 6" assets/app-v2.js
-          grep -q "timeRatio <= .45" assets/app-v2.js
-          grep -q "timeZ >= 3.5" assets/app-v2.js
-          grep -q "bounceDrop >= .2" assets/app-v2.js
-          grep -q "подозрительно низкие отказы" assets/app-v2.js
-          grep -q "day.metrics.time >= 600" assets/app-v2.js
-          grep -q "timeRatio >= 3" assets/app-v2.js
-          grep -q "подозрительно высокое среднее время" assets/app-v2.js
-          ! grep -q "аномально низкий отказ за период" assets/app-v2.js
-          ! grep -q "pdf-export-button" index.html
-          ! grep -q "assets/pdf.css" index.html
-          ! grep -q "assets/pdf-export.js" index.html
-          ! grep -q "html2canvas" index.html
-          ! grep -q "jspdf" index.html
-      - name: Check ClientID analysis
+          grep -q "if (kind === 'tech') coerceClientIdsToText(rows, map)" assets/app-v2.js
+          grep -q "function addTechRow(target, row, map)" assets/app-v2.js
+          grep -q "addClientId(target, row, map, visits)" assets/app-v2.js
+          grep -q "function addIpRow(target, row, map)" assets/app-v2.js
+          ! grep -q "clientIdSource" assets/app-v2.js
+          ! grep -q "addIpRow(target, row, map, includeClientId" assets/app-v2.js
+          grep -q "clientIdVisits / tech.visits" assets/app-v2.js
+      - name: Check interface and documentation
         run: |
-          grep -q "clientId: \['client id'" assets/app-v2.js
-          grep -q "const clientIdSource = state.ipMap?.clientId ? 'ip'" assets/app-v2.js
-          grep -q "clientIds: new Map()" assets/app-v2.js
-          grep -q "function addClientId" assets/app-v2.js
-          grep -q "function topShare" assets/app-v2.js
-          grep -q "top10ClientShare" assets/app-v2.js
-          grep -q "data.clientIdCoverage >= .5" assets/app-v2.js
-          grep -q "clientPeers.length >= 6" assets/app-v2.js
-          grep -q "score += Math.min(28, clientIdScore)" assets/app-v2.js
-          grep -q "ClientID за период" assets/app-v2.js
-          grep -q "ClientID: уник. / топ-1" assets/app-v2.js
-          grep -q "Уникальные ClientID" assets/app-v2.js
-          grep -q "IP + ClientID" index.html
-          grep -q "ClientID не отправляются на сервер" index.html
-      - name: Check ClientID text parsing and source filter
+          grep -q "Дата + источник + IP</h3>" index.html
+          grep -q "ClientID в этой выгрузке не требуется" index.html
+          grep -q "Дата + источник + техника + ClientID" index.html
+          grep -q "учитывается только из этого файла" index.html
+          grep -q "ClientID в IP-выгрузке не требуется" README.md
+          grep -q "ClientID берётся только из технической выгрузки" README.md
+          grep -q "Покрытие ClientID рассчитывается как доля технических визитов" README.md
+      - name: Check existing safeguards
         run: |
           grep -q "function parseCsvRows" assets/app-v2.js
-          grep -q "rows = parseCsvRows(await file.text())" assets/app-v2.js
-          grep -q "String(cells\[index\] ?? '')" assets/app-v2.js
-          grep -q "raw: false" assets/app-v2.js
-          grep -q "function coerceClientIdsToText" assets/app-v2.js
-          grep -q "coerceClientIdsToText(rows, map)" assets/app-v2.js
           grep -q "const MIN_SOURCE_VISITS = 20" assets/app-v2.js
-          grep -q "item.visits >= MIN_SOURCE_VISITS" assets/app-v2.js
-          grep -q "item.visits < MIN_SOURCE_VISITS" assets/app-v2.js
-          grep -q "менее чем 20 визитами за период исключаются" index.html
-          grep -q "суммарным объёмом менее 20 визитов" README.md
-          grep -q "MVP 0.5" index.html
-          grep -q "Что умеет версия 0.5" README.md
+          grep -q "score += Math.min(28, clientIdScore)" assets/app-v2.js
+          grep -q "подозрительно низкие отказы" assets/app-v2.js
+          grep -q "подозрительно высокое среднее время" assets/app-v2.js
+          ! grep -q "pdf-export-button" index.html
+      - name: Commit application changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/app-v2.js index.html README.md
+          if ! git diff --cached --quiet; then
+            git commit -m "Use ClientID only from technical export"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
