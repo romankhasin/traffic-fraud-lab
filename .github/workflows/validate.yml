@@ -5,44 +5,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PR branch
+      - name: Checkout
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Apply pending scoring stage 1 migration
-        run: |
-          if grep -q "function automationSignal" assets/app-v2.js; then
-            echo "Scoring stage 1 already applied"
-          else
-            python scripts/apply_scoring_stage1.py || true
-            grep -q "function automationSignal" assets/app-v2.js
-            grep -q "function capScoreByFamilies" assets/app-v2.js
-          fi
-
-      - name: Commit migration to PR branch
-        if: github.event_name == 'pull_request'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/app-v2.js README.md index.html scripts/validate_api_runtime.js .github/workflows/validate.yml
-          if git diff --cached --quiet; then
-            echo "No migration changes to commit"
-          else
-            git commit -m "Apply scoring model stage 1"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
 
       - name: Check JavaScript syntax
         run: |
@@ -78,6 +48,8 @@ jobs:
           grep -q "clientCoverage < .35" assets/app-v2.js
           grep -q "Объёмная значимость сигналов" index.html
           grep -q "Мультисигнальный score" index.html
+          test ! -f scripts/apply_scoring_stage1.py
+          test ! -f .github/workflows/apply-scoring-stage1.yml
 
       - name: Check API controls and campaign filter
         run: |
