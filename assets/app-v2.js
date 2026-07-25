@@ -428,8 +428,6 @@
     if (m.bounce >= .78 || m.bounce - base.bounce >= .28) { score += 24; reasons.push('сильно повышенный отказ за период'); }
     else if (m.bounce >= .62 || m.bounce - base.bounce >= .18) { score += 16; reasons.push('повышенный отказ за период'); }
     if (m.bounce <= .01 && data.visits >= 200) { score += 16; reasons.push('аномально низкий отказ за период'); }
-    if (m.time > 0 && m.time <= 20) { score += 22; reasons.push('очень короткое время за период'); }
-    else if (m.time > 0 && m.time <= 45) { score += 14; reasons.push('короткое время за период'); }
     if (m.newShare >= .995) { score += 9; reasons.push('практически весь трафик новый'); }
     if (base.quality > 0 && m.quality < base.quality * .15 && data.visits >= 1500) { score += 7; reasons.push('почти нет качественных конверсий'); }
     if (base.primary > 0 && m.primary > base.primary * 4 && data.visits >= 500) { score += 9; reasons.push('аномально высокая первичная конверсия'); }
@@ -489,10 +487,18 @@
         else if (bounceDiff >= .12 && bounceZ >= 2.5) { score += 15; reasons.push(`скачок отказов на ${formatPct(bounceDiff)}`); }
         if (day.metrics.bounce <= .01 && baseline.bounce >= .08 && day.visits >= 150) { score += 14; reasons.push('аномально низкий отказ в этот день'); }
 
+        const timeSample = sample((item) => item.metrics.time).filter((value) => value > 0);
         const timeRatio = ratio(day.metrics.time, baseline.time);
-        const timeZ = robustZ(day.metrics.time, sample((item) => item.metrics.time), 8);
-        if (day.metrics.time > 0 && baseline.time >= 30 && timeRatio <= .4 && timeZ >= 2.5) { score += 21; reasons.push(`время упало до ${Math.round(timeRatio * 100)}% обычного`); }
-        else if (day.metrics.time > 0 && baseline.time >= 30 && timeRatio <= .65 && timeZ >= 2.5) { score += 12; reasons.push(`заметное падение времени: ${Math.round(timeRatio * 100)}% базы`); }
+        const timeZ = robustZ(day.metrics.time, timeSample, 8);
+        const enoughTimeHistory = timeSample.length >= 6;
+        const enoughTimeVolume = day.visits >= Math.max(100, baseline.visits * .15);
+        if (enoughTimeHistory && enoughTimeVolume && day.metrics.time > 0 && baseline.time >= 30 && timeRatio <= .45 && timeZ >= 3.5) {
+          score += 24;
+          reasons.push(`среднее время ${formatDuration(day.metrics.time)} против медианы ${formatDuration(baseline.time)} (${Math.round(timeRatio * 100)}% обычного)`);
+        } else if (enoughTimeHistory && enoughTimeVolume && day.metrics.time > 0 && baseline.time >= 30 && timeRatio <= .6 && timeZ >= 3) {
+          score += 14;
+          reasons.push(`сильное падение среднего времени: ${Math.round(timeRatio * 100)}% медианы площадки`);
+        }
 
         const newDiff = day.metrics.newShare - baseline.newShare;
         if (newDiff >= .08 && robustZ(day.metrics.newShare, sample((item) => item.metrics.newShare), .015) >= 2.5) { score += 8; reasons.push('резкий рост доли новых посетителей'); }

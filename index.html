@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/styles.css">
   <link rel="stylesheet" href="assets/daily.css">
+  <link rel="stylesheet" href="assets/pdf.css">
 </head>
 <body>
   <header class="hub-nav">
@@ -108,11 +109,30 @@
           <h2>Дневной мониторинг качества трафика</h2>
           <p id="summary-text">Расчёт завершён.</p>
         </div>
-        <button class="button button--ghost" id="export-button" type="button">Скачать дневной CSV</button>
+        <button class="button button--ghost" id="export-button" type="button">Скачать CSV</button>
       </div>
 
       <div class="kpi-grid" id="kpi-grid"></div>
       <section class="conclusion" id="conclusion"></section>
+
+      <section class="panel panel--compact export-panel results-subsection" aria-label="Экспорт PDF">
+        <div class="export-panel__copy">
+          <span class="section-kicker">Экспорт</span>
+          <h3>Краткий PDF-отчёт</h3>
+          <p>Выберите все площадки или отметьте одну либо несколько. PDF формируется локально в браузере и включает итоговый score, надёжность оценки, визиты, отказы, среднее время, причины и аномальные даты.</p>
+        </div>
+        <div class="export-panel__controls">
+          <div class="pdf-scope" role="radiogroup" aria-label="Состав PDF-отчёта">
+            <label><input id="pdf-scope-all" type="radio" name="pdf-scope" value="all" checked> Все площадки</label>
+            <label><input id="pdf-scope-selected" type="radio" name="pdf-scope" value="selected"> Выбрать площадки</label>
+          </div>
+          <div class="pdf-source-selector" id="pdf-source-selector" hidden></div>
+          <div class="pdf-export-row">
+            <button class="button button--primary" id="pdf-export-button" type="button" disabled>Скачать PDF</button>
+            <span class="pdf-export-status" id="pdf-export-status">PDF будет компактным: до 6 аномальных дат на площадку.</span>
+          </div>
+        </div>
+      </section>
 
       <section class="panel panel--compact results-subsection">
         <div class="section-head">
@@ -192,11 +212,14 @@
   <footer>
     <div class="shell footer-inner">
       <span><strong>Traffic Fraud Lab</strong> · Level Digital Hub</span>
-      <span>MVP 0.2 · дневной мониторинг · локальная обработка</span>
+      <span>MVP 0.3 · дневной мониторинг · локальная обработка</span>
     </div>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script src="assets/app-v2.js"></script>
+  <script src="assets/pdf-export.js"></script>
 </body>
 </html>
