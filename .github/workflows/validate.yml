@@ -17,10 +17,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
 
-      - name: Apply Metrica API mode
-        run: |
-          python scripts/apply_api_mode.py
-          python scripts/patch_api_daily_labels.py
+      - name: Apply pending API labels
+        run: python scripts/patch_api_daily_labels.py
 
       - name: Check JavaScript syntax
         run: |
@@ -62,7 +60,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/app-v2.js index.html README.md
+          git add assets/app-v2.js
           if ! git diff --cached --quiet; then
             git commit -m "Clarify daily API concentration metrics"
             git push origin HEAD:${{ github.event.pull_request.head.ref }}
