@@ -5,14 +5,42 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout PR branch
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Apply pending scoring stage 1 migration
+        run: |
+          if grep -q "function automationSignal" assets/app-v2.js; then
+            echo "Scoring stage 1 already applied"
+          else
+            python scripts/apply_scoring_stage1.py
+          fi
+
+      - name: Commit migration to PR branch
+        if: github.event_name == 'pull_request'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/app-v2.js README.md index.html scripts/validate_api_runtime.js .github/workflows/validate.yml
+          if git diff --cached --quiet; then
+            echo "No migration changes to commit"
+          else
+            git commit -m "Apply scoring model stage 1"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
 
       - name: Check JavaScript syntax
         run: |
@@ -32,11 +60,22 @@ jobs:
           grep -q "Оценка конкретных визитов" assets/app-v2.js
           grep -q "VisitID высокий риск" assets/app-v2.js
           grep -q "Сумма подозрительных VisitID" index.html
-          grep -q "Что умеет версия 0.7" README.md
+          grep -q "Что умеет версия 0.8" README.md
           grep -q "один раз в итоговом количестве" README.md
           test ! -f scripts/apply_visit_risk_ui.py
           test ! -f .github/workflows/apply-visit-risk-ui.yml
           test ! -f scripts/.visit-risk-ui-trigger
+
+      - name: Check scoring stage 1
+        run: |
+          grep -q "function automationSignal" assets/app-v2.js
+          grep -q "function capScoreByFamilies" assets/app-v2.js
+          grep -q "automationVisits" assets/app-v2.js
+          grep -q "аномально низкие отказы как слабый подтверждающий сигнал" assets/app-v2.js
+          grep -q "addSignal(networkScore, 'network'" assets/app-v2.js
+          grep -q "clientCoverage < .35" assets/app-v2.js
+          grep -q "Объёмная значимость сигналов" index.html
+          grep -q "Мультисигнальный score" index.html
 
       - name: Check API controls and campaign filter
         run: |
@@ -54,7 +93,6 @@ jobs:
           grep -q "В анализ входят только кампании" assets/api-mode.js
           grep -Fq 'campaign ${campaignFilterLabel()}' assets/api-mode.js
           grep -q "function scoreDailyDays" assets/app-v2.js
-          grep -q "подозрительно низкие отказы" assets/app-v2.js
           grep -q "подозрительно высокое среднее время" assets/app-v2.js
           grep -q "score += Math.min(28, clientIdScore)" assets/app-v2.js
           grep -q "const MIN_SOURCE_VISITS = 20" assets/app-v2.js
