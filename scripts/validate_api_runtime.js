@@ -81,6 +81,17 @@ for (const source of sources) {
       ipv6Share: 0.2,
       unknownBrowserShare: 0,
       cookieEnabledShare: 1,
+      visitRisk: {
+        classifiedVisits: visits,
+        highRiskVisits: anomaly ? 600 : 0,
+        reviewVisits: anomaly ? 900 : 0,
+        lowRiskVisits: anomaly ? visits - 1500 : visits,
+        suspiciousVisits: anomaly ? 1500 : 0,
+        suspiciousShare: anomaly ? 1500 / visits : 0,
+        confidence: 'Высокая',
+        comment: anomaly ? '1 500 визитов требуют внимания.' : 'Выраженных сочетаний признаков не найдено.',
+        reasons: anomaly ? [{ code: 'repeated_clientid', label: 'повторные визиты одного ClientID', visits: 1500, shareOfSuspicious: 1 }] : [],
+      },
       automation: false,
       concentrationScope: 'daily',
       dataSource: 'yandex-metrica-logs-api',
@@ -104,6 +115,15 @@ if (!getElement('#kpi-grid').innerHTML.includes('Logs API')) {
 }
 if (!getElement('#source-list').innerHTML.includes('ClientID — дневные максимумы')) {
   throw new Error('Daily concentration labels were not rendered');
+}
+if (!getElement('#source-list').innerHTML.includes('Оценка конкретных визитов')) {
+  throw new Error('Visit-level risk summary was not rendered');
+}
+if (!getElement('#source-list').innerHTML.includes('повторные визиты одного ClientID')) {
+  throw new Error('Visit-level reason was not rendered');
+}
+if (!getElement('#kpi-grid').innerHTML.includes('Подозрительные визиты')) {
+  throw new Error('Refined suspicious visits KPI was not rendered');
 }
 if (!getElement('#summary-text').textContent.includes('Runtime test')) {
   throw new Error('API context was not rendered');

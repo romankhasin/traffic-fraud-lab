@@ -728,7 +728,11 @@
         risk,
         confidence,
         reasons: [...new Set(reasons)],
-        flaggedVisits: risk === 'low' ? 0 : day.visits,
+        flaggedVisits: risk === 'low'
+          ? 0
+          : day.visitRisk
+            ? Math.min(day.visits, Number(day.visitRisk.suspiciousVisits) || 0)
+            : day.visits,
         month: day.date.slice(0, 7)
       };
     });
@@ -774,6 +778,57 @@
       const candidate = row[field] || { key: '—', value: 0, share: 0 };
       return (Number(candidate.share) || 0) > (Number(best.share) || 0) ? candidate : best;
     }, { key: '—', value: 0, share: 0 });
+  }
+
+  function aggregateVisitRisk(rows) {
+    const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+    let classifiedVisits = 0;
+    let highRiskVisits = 0;
+    let reviewVisits = 0;
+    let lowRiskVisits = 0;
+    const reasonMap = new Map();
+    const confidenceRank = { 'Низкая': 1, 'Средняя': 2, 'Высокая': 3 };
+    let confidence = 'Высокая';
+    let hasData = false;
+
+    for (const row of rows || []) {
+      const visitRisk = row?.visitRisk;
+      if (!visitRisk) continue;
+      hasData = true;
+      classifiedVisits += number(visitRisk.classifiedVisits);
+      highRiskVisits += number(visitRisk.highRiskVisits);
+      reviewVisits += number(visitRisk.reviewVisits);
+      lowRiskVisits += number(visitRisk.lowRiskVisits);
+      if ((confidenceRank[visitRisk.confidence] || 0) < (confidenceRank[confidence] || 0)) confidence = visitRisk.confidence || confidence;
+      for (const reason of visitRisk.reasons || []) {
+        const code = String(reason.code || reason.label || 'other');
+        const current = reasonMap.get(code) || { code, label: String(reason.label || code), visits: 0 };
+        current.visits += number(reason.visits);
+        reasonMap.set(code, current);
+      }
+    }
+    if (!hasData) return null;
+
+    const suspiciousVisits = highRiskVisits + reviewVisits;
+    const reasons = [...reasonMap.values()]
+      .sort((a, b) => b.visits - a.visits)
+      .map((reason) => ({ ...reason, shareOfSuspicious: suspiciousVisits ? reason.visits / suspiciousVisits : 0 }));
+    const topReasons = reasons.slice(0, 2).map((reason) => reason.label);
+    const comment = suspiciousVisits
+      ? `${formatInt(suspiciousVisits)} визитов требуют внимания: ${formatInt(highRiskVisits)} высокого риска и ${formatInt(reviewVisits)} требуют проверки. Основные причины — ${topReasons.join(' и ') || 'совпадение нескольких независимых признаков'}.`
+      : 'Выраженных сочетаний признаков на уровне отдельных визитов не найдено.';
+
+    return {
+      classifiedVisits,
+      highRiskVisits,
+      reviewVisits,
+      lowRiskVisits,
+      suspiciousVisits,
+      suspiciousShare: classifiedVisits ? suspiciousVisits / classifiedVisits : 0,
+      confidence,
+      comment,
+      reasons
+    };
   }
 
   function aggregateApiSnapshots(rows) {
@@ -823,6 +878,7 @@
       ipv6Share: weighted((row) => row.ipv6Share, (row) => number(row.ip?.visits || row.visits)),
       unknownBrowserShare: weighted((row) => row.unknownBrowserShare, (row) => number(row.tech?.visits || row.visits)),
       cookieEnabledShare: weighted((row) => row.cookieEnabledShare),
+      visitRisk: aggregateVisitRisk(rows),
       automation: rows.some((row) => Boolean(row.automation)),
       concentrationScope: 'daily',
       dataSource: 'yandex-metrica-logs-api'
@@ -935,7 +991,7 @@
 
     ui.kpis.innerHTML = [
       ['Всего визитов', formatInt(totalVisits), `${state.results.length} источников`],
-      ['Визиты в аномальные дни', formatInt(flaggedVisits), formatPct(totalVisits ? flaggedVisits / totalVisits : 0) + ' трафика'],
+      [state.dataMode === 'api' ? 'Подозрительные визиты' : 'Визиты в аномальные дни', formatInt(flaggedVisits), formatPct(totalVisits ? flaggedVisits / totalVisits : 0) + (state.dataMode === 'api' ? ' получили сочетание признаков' : ' трафика')],
       ['Аномальные дни', formatInt(anomalousDays.length), `${highDays.length} высокого риска`],
       ['Источники высокого риска', formatInt(highSources.length), 'по периоду и дням'],
       ['Средний отказ', formatPct(base.bounce), 'по всей базе'],
@@ -945,7 +1001,9 @@
     ].map(([label, value, note]) => `<article class="kpi"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`).join('');
 
     const conclusion = anomalousDays.length
-      ? `Найдено ${anomalousDays.length} ${plural(anomalousDays.length, 'аномальное сочетание источника и дня', 'аномальных сочетания источника и дня', 'аномальных сочетаний источника и дня')}. В оценочный объём вошло ${formatInt(flaggedVisits)} визитов, совершённых в эти дни. Это объём под проверкой, а не точное число фродовых визитов.`
+      ? state.dataMode === 'api'
+        ? `Найдено ${anomalousDays.length} ${plural(anomalousDays.length, 'аномальное сочетание источника и дня', 'аномальных сочетания источника и дня', 'аномальных сочетаний источника и дня')}. Внутри них ${formatInt(flaggedVisits)} визитов получили сочетание независимых признаков и отнесены к высокому риску либо требуют проверки. Это оценка риска, а не доказанный фрод.`
+        : `Найдено ${anomalousDays.length} ${plural(anomalousDays.length, 'аномальное сочетание источника и дня', 'аномальных сочетания источника и дня', 'аномальных сочетаний источника и дня')}. В оценочный объём вошло ${formatInt(flaggedVisits)} визитов, совершённых в эти дни. Это объём под проверкой, а не точное число фродовых визитов.`
       : 'Однодневных отклонений с достаточной выборкой не найдено. Каждый день сравнивался с остальными днями того же источника.';
     ui.conclusion.innerHTML = `<strong>Общий вывод</strong>${escapeHtml(conclusion)}`;
     const contextText = state.analysisContext ? ` ${state.analysisContext}.` : '';
@@ -1007,8 +1065,12 @@
   function renderSourceCard(row, index) {
     const reasons = row.reasons.length ? row.reasons : ['критичных сочетаний признаков не найдено'];
     const dailyRows = row.anomalousDays.length
-      ? row.anomalousDays.map((day) => `<tr><td>${escapeHtml(formatDate(day.date))}</td><td>${formatInt(day.visits)}</td><td>${formatPct(day.metrics.bounce)}</td><td>${formatDuration(day.metrics.time)}</td><td>${day.clientIdVisits ? `${formatInt(day.uniqueClientIds)} / ${formatPct(day.topClientId.share)}` : '—'}</td><td><span class="risk-pill ${day.risk}">${day.score}/100</span></td><td>${escapeHtml(day.reasons.slice(0, 3).join(' · '))}</td></tr>`).join('')
-      : '<tr><td colspan="7">Аномальных дней с достаточной выборкой не найдено.</td></tr>';
+      ? row.anomalousDays.map((day) => `<tr><td>${escapeHtml(formatDate(day.date))}</td><td>${formatInt(day.visits)}</td><td>${day.visitRisk ? formatInt(day.visitRisk.suspiciousVisits) : formatInt(day.flaggedVisits)}</td><td>${formatPct(day.metrics.bounce)}</td><td>${formatDuration(day.metrics.time)}</td><td>${day.clientIdVisits ? `${formatInt(day.uniqueClientIds)} / ${formatPct(day.topClientId.share)}` : '—'}</td><td><span class="risk-pill ${day.risk}">${day.score}/100</span></td><td>${escapeHtml(day.reasons.slice(0, 3).join(' · '))}</td></tr>`).join('')
+      : '<tr><td colspan="8">Аномальных дней с достаточной выборкой не найдено.</td></tr>';
+    const visitRisk = aggregateVisitRisk(row.anomalousDays);
+    const visitRiskReasons = visitRisk?.reasons?.length
+      ? `<ul class="flag-list">${visitRisk.reasons.slice(0, 5).map((reason) => `<li>${escapeHtml(reason.label)} — ${formatInt(reason.visits)} визитов</li>`).join('')}</ul>`
+      : '';
     const dailyConcentrations = row.concentrationScope === 'daily';
     const ipTitle = dailyConcentrations ? 'IP и подсети — максимум за день' : 'IP и подсети за период';
     const techTitle = dailyConcentrations ? 'Технический профиль — максимум за день' : 'Технический профиль';
@@ -1025,16 +1087,17 @@
           <div><strong>${formatInt(row.visits)}</strong><span>визиты</span></div>
           <div><strong>${row.days.length}</strong><span>дней в базе</span></div>
           <div><strong>${row.anomalousDays.length}</strong><span>аномальных дней</span></div>
-          <div><strong>${formatInt(row.anomalousDays.reduce((sum, day) => sum + day.flaggedVisits, 0))}</strong><span>визиты под проверкой</span></div>
+          <div><strong>${formatInt(row.anomalousDays.reduce((sum, day) => sum + day.flaggedVisits, 0))}</strong><span>${state.dataMode === 'api' ? 'подозрительные визиты' : 'визиты под проверкой'}</span></div>
           <div><strong>${formatPct(row.metrics.bounce)}</strong><span>отказы</span></div>
           <div><strong>${escapeHtml(row.confidence)}</strong><span>уверенность</span></div>
         </div>
-        <section class="daily-detail"><h4>Конкретные аномальные даты</h4><div class="table-wrap mini-table-wrap"><table class="mini-table"><thead><tr><th>Дата</th><th>Визиты</th><th>Отказы</th><th>Время</th><th>ClientID: уник. / топ-1</th><th>Score</th><th>Причины</th></tr></thead><tbody>${dailyRows}</tbody></table></div></section>
+        <section class="daily-detail"><h4>Конкретные аномальные даты</h4><div class="table-wrap mini-table-wrap"><table class="mini-table"><thead><tr><th>Дата</th><th>Визиты</th><th>Подозр.</th><th>Отказы</th><th>Время</th><th>ClientID: уник. / топ-1</th><th>Score</th><th>Причины</th></tr></thead><tbody>${dailyRows}</tbody></table></div></section>
         <div class="detail-grid">
           <section class="detail"><h4>Почему такой score</h4><ul class="flag-list">${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul></section>
           <section class="detail"><h4>${ipTitle}</h4><p><b>Топ IP:</b> ${escapeHtml(maskIp(row.topIp.key))} · ${formatPct(row.topIp.share)}</p><p><b>Топ подсеть:</b> ${escapeHtml(row.topSubnet.key)} · ${formatPct(row.topSubnet.share)}</p></section>
           <section class="detail"><h4>${techTitle}</h4><p><b>Топ браузер:</b> ${escapeHtml(row.topBrowser.key)} · ${formatPct(row.topBrowser.share)}</p><p><b>Топ связка:</b> ${escapeHtml(shorten(row.topProfile.key, 100))} · ${formatPct(row.topProfile.share)}</p></section>
           <section class="detail"><h4>${clientTitle}</h4>${row.clientIdVisits ? `<p><b>Покрытие:</b> ${formatPct(row.clientIdCoverage)}</p><p><b>${uniqueClientLabel}:</b> ${formatInt(row.uniqueClientIds)}</p><p><b>${visitsPerClientLabel}:</b> ${row.visitsPerClientId.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p><p><b>Макс. топ-1 / топ-10:</b> ${formatPct(row.topClientId.share)} / ${formatPct(row.top10ClientShare)}</p>` : '<p>ClientID не найден в выбранных данных.</p>'}</section>
+          ${state.dataMode === 'api' ? `<section class="detail detail--visit-risk"><h4>Оценка конкретных визитов</h4>${visitRisk ? `<p><b>Высокий риск:</b> ${formatInt(visitRisk.highRiskVisits)}</p><p><b>Требуют проверки:</b> ${formatInt(visitRisk.reviewVisits)}</p><p><b>Всего подозрительных:</b> ${formatInt(visitRisk.suspiciousVisits)} · ${formatPct(visitRisk.suspiciousShare)}</p><p><b>Надёжность:</b> ${escapeHtml(visitRisk.confidence)}</p><p>${escapeHtml(visitRisk.comment)}</p>${visitRiskReasons}` : '<p>Для выбранных аномальных дней классификация визитов ещё не рассчитана.</p>'}</section>` : ''}
           <section class="detail"><h4>Покрытие</h4><p><b>Техническая выгрузка:</b> ${formatInt(row.tech.visits)} визитов</p><p><b>IP-выгрузка:</b> ${formatInt(row.ip.visits)} визитов</p><p><b>Дней:</b> ${row.days.length}</p></section>
           <section class="detail detail--action"><h4>Рекомендация</h4><p>${escapeHtml(row.action)}</p></section>
         </div>
@@ -1070,10 +1133,11 @@
 
   function exportCsv() {
     if (!state.dailyResults.length) return;
-    const headers = ['Дата','Месяц','Источник','Визиты','Обычный дневной объём','Отказы','Обычные отказы','Время, сек','Обычное время, сек','Топ IP, доля','Топ подсеть, доля','Топ техпрофиль, доля','ClientID, покрытие','Уникальные ClientID','Визитов на ClientID','Топ-1 ClientID, доля','Обычная доля топ-1 ClientID','Топ-10 ClientID, доля','Обычная доля топ-10 ClientID','Risk score','Уровень','Уверенность','Визиты под проверкой','Причины'];
+    const headers = ['Дата','Месяц','Источник','Визиты','Обычный дневной объём','Отказы','Обычные отказы','Время, сек','Обычное время, сек','Топ IP, доля','Топ подсеть, доля','Топ техпрофиль, доля','ClientID, покрытие','Уникальные ClientID','Визитов на ClientID','Топ-1 ClientID, доля','Обычная доля топ-1 ClientID','Топ-10 ClientID, доля','Обычная доля топ-10 ClientID','VisitID высокий риск','VisitID требуют проверки','VisitID подозрительные','Причины VisitID','Risk score','Уровень','Уверенность','Визиты под проверкой','Причины'];
     const rows = state.dailyResults.map((day) => [
       day.date, day.month, day.source, day.visits, day.baseline.visits, day.metrics.bounce, day.baseline.bounce, day.metrics.time, day.baseline.time,
       day.topIp.share, day.topSubnet.share, day.topProfile.share, day.clientIdCoverage, day.uniqueClientIds, day.visitsPerClientId, day.topClientId.share, day.baseline.topClientId, day.top10ClientShare, day.baseline.top10ClientShare,
+      day.visitRisk?.highRiskVisits || 0, day.visitRisk?.reviewVisits || 0, day.visitRisk?.suspiciousVisits || 0, (day.visitRisk?.reasons || []).map((reason) => `${reason.label}: ${reason.visits}`).join('; '),
       day.score, riskLabel(day.risk), day.confidence, day.flaggedVisits, day.reasons.join('; ')
     ]);
     const csv = '\uFEFF' + [headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\r\n');

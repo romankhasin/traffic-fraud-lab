@@ -23,37 +23,31 @@ jobs:
       - name: Run API analysis runtime test
         run: node scripts/validate_api_runtime.js
 
-      - name: Check API controls and integration
+      - name: Check visit-risk UI integration
+        run: |
+          grep -q "function aggregateVisitRisk" assets/app-v2.js
+          grep -q "visitRisk: aggregateVisitRisk(rows)" assets/app-v2.js
+          grep -q "day.visitRisk" assets/app-v2.js
+          grep -q "Подозрительные визиты" assets/app-v2.js
+          grep -q "Оценка конкретных визитов" assets/app-v2.js
+          grep -q "VisitID высокий риск" assets/app-v2.js
+          grep -q "Сумма подозрительных VisitID" index.html
+          grep -q "Что умеет версия 0.7" README.md
+          grep -q "один раз в итоговом количестве" README.md
+          test ! -f scripts/apply_visit_risk_ui.py
+          test ! -f .github/workflows/apply-visit-risk-ui.yml
+          test ! -f scripts/.visit-risk-ui-trigger
+
+      - name: Check API controls and existing fraud rules
         run: |
           test -f assets/api.css
           test -f assets/api-mode.js
           test -f scripts/validate_api_runtime.js
-          test ! -f scripts/apply_api_mode.py
-          test ! -f scripts/patch_api_daily_labels.py
           grep -q "api-counter-list" index.html
           grep -q "api-date-from" index.html
           grep -q "api-date-to" index.html
           grep -q "api-analyze-button" index.html
-          grep -q "assets/api-mode.js" index.html
-          grep -q "assets/api.css" index.html
-          grep -q "function buildApiSources" assets/app-v2.js
-          grep -q "function aggregateApiSnapshots" assets/app-v2.js
           grep -q "analyzeApiRows" assets/app-v2.js
-          grep -q "precomputedSnapshot" assets/app-v2.js
-          grep -q "concentrationScope !== 'daily'" assets/app-v2.js
-          grep -q "ClientID — дневные максимумы" assets/app-v2.js
-          grep -q "Макс. уникальных за день" assets/app-v2.js
-          grep -q "raw.githubusercontent.com/romankhasin/-level-group-dashboard/main/data/fraud" assets/api-mode.js
-          grep -q "Logs API без лимита строк" index.html
-          grep -q "Что умеет версия 0.6" README.md
-
-      - name: Check existing fraud rules
-        run: |
-          test -f index.html
-          test -f assets/styles.css
-          test -f assets/daily.css
-          test ! -f assets/pdf.css
-          test ! -f assets/pdf-export.js
           grep -q "function scoreDailyDays" assets/app-v2.js
           grep -q "подозрительно низкие отказы" assets/app-v2.js
           grep -q "подозрительно высокое среднее время" assets/app-v2.js
