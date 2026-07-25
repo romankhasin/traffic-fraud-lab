@@ -40,13 +40,20 @@ global.URL = {
   createObjectURL() { return 'blob:test'; },
   revokeObjectURL() {},
 };
+global.fetch = async () => ({ ok: false, status: 404 });
 
 vm.runInThisContext(fs.readFileSync('assets/app-v2.js', 'utf8'), {
   filename: 'assets/app-v2.js',
 });
+vm.runInThisContext(fs.readFileSync('assets/api-mode.js', 'utf8'), {
+  filename: 'assets/api-mode.js',
+});
 
 if (!global.FraudLab || typeof global.FraudLab.analyzeApiRows !== 'function') {
   throw new Error('FraudLab API was not exposed');
+}
+if (!global.FraudLabApiHelpers || typeof global.FraudLabApiHelpers.summarizeClientIds !== 'function') {
+  throw new Error('ClientID API helpers were not exposed');
 }
 
 const rows = [];
@@ -57,7 +64,8 @@ for (const source of sources) {
     const visits = anomaly ? 2800 : source === 'stable_source' ? 950 : 720;
     const bounce = anomaly ? 0 : source === 'stable_source' ? 0.34 : 0.52;
     const duration = anomaly ? 1200 : source === 'stable_source' ? 130 : 84;
-    const clientIds = anomaly ? 40 : Math.round(visits * 0.92);
+    const clientIdVisits = source === 'stable_source' && day === 2 ? Math.round(visits * 0.5) : visits;
+    const clientIds = anomaly ? 40 : Math.min(clientIdVisits, Math.round(visits * 0.92));
     const topClientShare = anomaly ? 0.4 : 0.01;
     rows.push({
       source,
@@ -71,13 +79,13 @@ for (const source of sources) {
       topProfile: { key: 'chrome · windows · desktop · 1920x1080', value: Math.round(visits * (anomaly ? 0.82 : 0.28)), share: anomaly ? 0.82 : 0.28 },
       topIp: { key: 'скрыто', value: Math.round(visits * (anomaly ? 0.3 : 0.01)), share: anomaly ? 0.3 : 0.01 },
       topSubnet: { key: 'скрыто', value: Math.round(visits * (anomaly ? 0.42 : 0.03)), share: anomaly ? 0.42 : 0.03 },
-      clientIdVisits: visits,
+      clientIdVisits,
       uniqueClientIds: clientIds,
-      topClientId: { key: 'скрыто', value: Math.round(visits * topClientShare), share: topClientShare },
+      topClientId: { key: 'скрыто', value: Math.round(clientIdVisits * topClientShare), share: topClientShare },
       top10ClientShare: anomaly ? 0.82 : 0.03,
-      visitsPerClientId: visits / clientIds,
-      repeatClientVisitShare: Math.max(0, visits - clientIds) / visits,
-      clientIdCoverage: 1,
+      visitsPerClientId: clientIds ? clientIdVisits / clientIds : 0,
+      repeatClientVisitShare: clientIdVisits ? Math.max(0, clientIdVisits - clientIds) / clientIdVisits : 0,
+      clientIdCoverage: clientIdVisits / visits,
       ipv6Share: 0.2,
       unknownBrowserShare: 0,
       cookieEnabledShare: 1,
@@ -99,6 +107,18 @@ for (const source of sources) {
       dataSource: 'yandex-metrica-logs-api',
     });
   }
+}
+
+const clientIdSummaries = global.FraudLabApiHelpers.summarizeClientIds(rows);
+const stableClientId = clientIdSummaries.get('stable_source');
+if (!stableClientId || stableClientId.lowCoverageDays !== 1) {
+  throw new Error(`Unexpected low-coverage day count: ${JSON.stringify(stableClientId)}`);
+}
+if (Math.abs(stableClientId.minCoverage.value - 0.5) > 0.000001 || stableClientId.minCoverage.date !== '2026-07-02') {
+  throw new Error(`Unexpected minimum ClientID coverage: ${JSON.stringify(stableClientId.minCoverage)}`);
+}
+if (!stableClientId.maxUnique.date || !stableClientId.maxTop1.date || !stableClientId.maxTop10.date) {
+  throw new Error('ClientID maxima dates were not preserved');
 }
 
 const result = global.FraudLab.analyzeApiRows(rows, {
