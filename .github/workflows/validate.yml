@@ -27,7 +27,8 @@ jobs:
           grep -q "monthly-table" index.html
           ! grep -q "Все дневные срезы" index.html
           ! grep -q "class=\"daily-table\"" index.html
-          ! grep -q "class=\"daily-detail\"" assets/app-v2.js
+          grep -q "class=\"daily-detail\"" assets/app-v2.js
+          grep -q "const dailyRows = row.anomalousDays.length" assets/app-v2.js
           grep -q "function scoreDailyDays" assets/app-v2.js
           grep -q "const days = scoreDailyDays(source)" assets/app-v2.js
           grep -q "state.dailyResults = state.results.flatMap" assets/app-v2.js
