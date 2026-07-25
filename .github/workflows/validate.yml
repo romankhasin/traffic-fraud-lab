@@ -23,7 +23,15 @@ jobs:
           python-version: "3.12"
 
       - name: Apply visit-risk UI
-        run: python scripts/apply_visit_risk_ui.py
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply_visit_risk_ui.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('"""           <div><strong>${formatInt(row.anomalousDays', '"""          <div><strong>${formatInt(row.anomalousDays')
+          path.write_text(text, encoding='utf-8')
+          PY
+          python scripts/apply_visit_risk_ui.py
 
       - name: Check JavaScript syntax
         run: |
