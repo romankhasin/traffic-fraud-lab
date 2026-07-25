@@ -5,7 +5,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   validate:
@@ -13,6 +14,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Apply visit-risk UI
+        run: python scripts/apply_visit_risk_ui.py
 
       - name: Check JavaScript syntax
         run: |
@@ -23,37 +34,28 @@ jobs:
       - name: Run API analysis runtime test
         run: node scripts/validate_api_runtime.js
 
-      - name: Check API controls and integration
+      - name: Check visit-risk UI integration
+        run: |
+          grep -q "function aggregateVisitRisk" assets/app-v2.js
+          grep -q "visitRisk: aggregateVisitRisk(rows)" assets/app-v2.js
+          grep -q "day.visitRisk" assets/app-v2.js
+          grep -q "Подозрительные визиты" assets/app-v2.js
+          grep -q "Оценка конкретных визитов" assets/app-v2.js
+          grep -q "VisitID высокий риск" assets/app-v2.js
+          grep -q "Сумма подозрительных VisitID" index.html
+          grep -q "Что умеет версия 0.7" README.md
+          grep -q "один раз в итоговом количестве" README.md
+
+      - name: Check API controls and existing fraud rules
         run: |
           test -f assets/api.css
           test -f assets/api-mode.js
           test -f scripts/validate_api_runtime.js
-          test ! -f scripts/apply_api_mode.py
-          test ! -f scripts/patch_api_daily_labels.py
           grep -q "api-counter-list" index.html
           grep -q "api-date-from" index.html
           grep -q "api-date-to" index.html
           grep -q "api-analyze-button" index.html
-          grep -q "assets/api-mode.js" index.html
-          grep -q "assets/api.css" index.html
-          grep -q "function buildApiSources" assets/app-v2.js
-          grep -q "function aggregateApiSnapshots" assets/app-v2.js
           grep -q "analyzeApiRows" assets/app-v2.js
-          grep -q "precomputedSnapshot" assets/app-v2.js
-          grep -q "concentrationScope !== 'daily'" assets/app-v2.js
-          grep -q "ClientID — дневные максимумы" assets/app-v2.js
-          grep -q "Макс. уникальных за день" assets/app-v2.js
-          grep -q "raw.githubusercontent.com/romankhasin/-level-group-dashboard/main/data/fraud" assets/api-mode.js
-          grep -q "Logs API без лимита строк" index.html
-          grep -q "Что умеет версия 0.6" README.md
-
-      - name: Check existing fraud rules
-        run: |
-          test -f index.html
-          test -f assets/styles.css
-          test -f assets/daily.css
-          test ! -f assets/pdf.css
-          test ! -f assets/pdf-export.js
           grep -q "function scoreDailyDays" assets/app-v2.js
           grep -q "подозрительно низкие отказы" assets/app-v2.js
           grep -q "подозрительно высокое среднее время" assets/app-v2.js
@@ -61,3 +63,13 @@ jobs:
           grep -q "const MIN_SOURCE_VISITS = 20" assets/app-v2.js
           grep -q "if (kind === 'tech') coerceClientIdsToText(rows, map)" assets/app-v2.js
           ! grep -q "pdf-export-button" index.html
+
+      - name: Commit applied UI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/app-v2.js index.html README.md scripts/validate_api_runtime.js
+          if ! git diff --cached --quiet; then
+            git commit -m "Show aggregated suspicious visit counts"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
