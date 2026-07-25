@@ -23,6 +23,8 @@
     primaryConversion: ['конверсия (первичные звонки uis)','первичные звонки','primary calls','primary conversion']
   };
 
+  const MIN_SOURCE_VISITS = 20;
+
   const LABELS = {
     date: 'Дата', source: 'Источник', ip: 'IP', clientId: 'ClientID', visits: 'Визиты', users: 'Посетители', bounce: 'Отказы', time: 'Время',
     newShare: 'Новые', browser: 'Браузер', os: 'ОС', device: 'Устройство', resolution: 'Разрешение',
@@ -100,10 +102,18 @@
     return map;
   }
 
+  function coerceClientIdsToText(rows, map) {
+    if (!map.clientId) return;
+    for (const row of rows) {
+      const value = row[map.clientId];
+      row[map.clientId] = value == null ? '' : String(value).trim();
+    }
+  }
+
   async function readRows(file) {
     if (!window.XLSX) throw new Error('Не загрузилась библиотека чтения Excel. Проверьте интернет и обновите страницу.');
     const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, raw: true });
     if (!workbook.SheetNames.length) throw new Error('В файле не найдено листов.');
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true });
@@ -117,6 +127,7 @@
     try {
       const rows = await readRows(file);
       const map = detectMap(Object.keys(rows[0] || {}));
+      coerceClientIdsToText(rows, map);
       const missing = REQUIRED[kind].filter((field) => !map[field]);
       state[`${kind}Rows`] = rows;
       state[`${kind}Map`] = map;
@@ -667,8 +678,15 @@
 
   function analyze() {
     try {
-      const sources = buildAggregates();
-      if (!sources.length) throw new Error('После очистки итоговых строк и дат не осталось данных для анализа.');
+      const sourceVolumes = buildAggregates().map((source) => ({ source, visits: snapshot(source).visits }));
+      const includedSources = sourceVolumes.filter((item) => item.visits >= MIN_SOURCE_VISITS);
+      const excludedSources = sourceVolumes.filter((item) => item.visits < MIN_SOURCE_VISITS);
+      const sources = includedSources.map((item) => item.source);
+      if (!sources.length) throw new Error(`После очистки данных не осталось площадок с ${MIN_SOURCE_VISITS} и более визитами за период.`);
+      if (excludedSources.length) {
+        const excludedVisits = excludedSources.reduce((sum, item) => sum + item.visits, 0);
+        showValidation(`Исключено ${excludedSources.length} ${plural(excludedSources.length, 'площадка', 'площадки', 'площадок')} с объёмом менее ${MIN_SOURCE_VISITS} визитов за период (${formatInt(excludedVisits)} визитов).`, false);
+      }
       const base = buildBase(sources);
       state.results = sources.map((source) => combineSource(source, base)).sort((a, b) => b.score - a.score || b.visits - a.visits);
       state.dailyResults = state.results.flatMap((source) => source.days).sort((a, b) => b.score - a.score || b.date.localeCompare(a.date));
