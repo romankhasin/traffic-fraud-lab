@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Локальная проверка дневных выгрузок Яндекс Метрики на признаки фрода и низкокачественного трафика">
+  <meta name="description" content="Фрод-анализ трафика по полным данным Yandex Metrica Logs API с выбором счётчика и периода">
   <title>Traffic Fraud Lab · Level Digital Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/styles.css">
   <link rel="stylesheet" href="assets/daily.css">
+  <link rel="stylesheet" href="assets/api.css">
 </head>
 <body>
   <header class="hub-nav">
@@ -33,30 +34,65 @@
       <div>
         <div class="eyebrow">Level Group · Traffic Quality</div>
         <h1>Traffic Fraud Lab</h1>
-        <p class="hero__lead">Загрузите две дневные выгрузки Яндекс Метрики. Инструмент сравнит каждый день источника с его остальными днями, найдёт локальные всплески и сформирует оценку объёма трафика под проверкой.</p>
+        <p class="hero__lead">Выберите счётчик и период. Инструмент загрузит полные дневные агрегаты из Yandex Metrica Logs API, сравнит каждый день источника с его историей и сформирует оценку объёма трафика под проверкой.</p>
         <div class="hero__chips">
           <span>Источник × день</span>
           <span>Медиана + MAD</span>
-          <span>Локальная обработка</span>
+          <span>Logs API без лимита строк</span>
+          <span>Без хранения идентификаторов</span>
         </div>
       </div>
       <aside class="privacy-card">
         <span class="privacy-card__icon" aria-hidden="true">✓</span>
         <div>
-          <strong>Данные остаются на устройстве</strong>
-          <p>Файлы читаются браузером. Исходные строки, IP-адреса и ClientID не отправляются на сервер.</p>
+          <strong>Исходные идентификаторы не публикуются</strong>
+          <p>IP, ClientID и VisitID обрабатываются внутри защищённого GitHub Action. В дашборд поступают только дневные агрегаты и доли.</p>
         </div>
       </aside>
     </div>
   </section>
 
   <main class="shell main">
+    <section class="panel api-panel" id="api-section">
+      <div class="section-head">
+        <div>
+          <span class="section-kicker">Основной режим</span>
+          <h2>Загрузить напрямую из Метрики</h2>
+          <p>Счётчики обновляются автоматически. Выберите один или несколько счётчиков и период до последнего полностью завершённого дня.</p>
+        </div>
+      </div>
+
+      <div class="api-grid">
+        <fieldset class="api-fieldset">
+          <legend>Счётчики</legend>
+          <div class="counter-list" id="api-counter-list">
+            <span class="api-generated">Загружаю список доступных счётчиков…</span>
+          </div>
+        </fieldset>
+        <div class="api-field">
+          <span>Период анализа</span>
+          <div class="api-dates">
+            <label class="api-field"><span>С</span><input id="api-date-from" type="date"></label>
+            <label class="api-field"><span>По</span><input id="api-date-to" type="date"></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="api-actions">
+        <button class="button button--primary" id="api-analyze-button" type="button" disabled>Загрузить и проанализировать</button>
+        <span class="api-generated" id="api-generated"></span>
+      </div>
+      <div class="api-status" id="api-status">Подключаюсь к каталогу подготовленных данных…</div>
+    </section>
+
+    <div class="manual-divider">Ручная загрузка остаётся резервным режимом</div>
+
     <section class="panel" id="upload-section">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Шаг 1</span>
-          <h2>Загрузите дневные выгрузки</h2>
-          <p>В обоих файлах обязательна отдельная колонка с датой визита. Поддерживаются значения вида 25.07.2026 и 2026-07-25.</p>
+          <span class="section-kicker">Резервный режим</span>
+          <h2>Загрузить файлы вручную</h2>
+          <p>Используйте этот вариант для сторонних счётчиков или проверки локальных файлов. В обоих файлах обязательна отдельная дата визита.</p>
         </div>
         <button class="button button--ghost" id="demo-button" type="button">Показать демо</button>
       </div>
@@ -192,11 +228,12 @@
   <footer>
     <div class="shell footer-inner">
       <span><strong>Traffic Fraud Lab</strong> · Level Digital Hub</span>
-      <span>MVP 0.5 · дневной мониторинг · локальная обработка</span>
+      <span>Версия 0.6 · Metrica Logs API · дневной мониторинг</span>
     </div>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="assets/app-v2.js"></script>
+  <script src="assets/api-mode.js"></script>
 </body>
 </html>

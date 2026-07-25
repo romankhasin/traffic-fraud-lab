@@ -44,6 +44,8 @@
     results: [],
     dailyResults: [],
     monthlyResults: [],
+    analysisContext: '',
+    dataMode: 'manual',
     riskFilter: 'all',
     query: ''
   };
@@ -475,6 +477,7 @@
   }
 
   function snapshot(slice) {
+    if (slice?.precomputedSnapshot) return slice.precomputedSnapshot;
     const tech = finishBucket(slice.tech);
     const ip = finishBucket(slice.ip);
     const metrics = tech.visits ? tech : ip;
@@ -505,12 +508,35 @@
   }
 
   function buildBase(sources) {
-    const bucket = emptyBucket();
+    let visits = 0;
+    let users = 0;
+    let bounceWeighted = 0;
+    let timeWeighted = 0;
+    let newWeighted = 0;
+    let qualityWeighted = 0;
+    let primaryWeighted = 0;
     for (const source of sources) {
-      const selected = source.tech.visits ? source.tech : source.ip;
-      Object.keys(bucket).forEach((key) => { bucket[key] += selected[key] || 0; });
+      const data = snapshot(source);
+      const metrics = data.metrics || {};
+      const sourceVisits = Number(data.visits) || 0;
+      const sourceUsers = Number(metrics.users) || sourceVisits;
+      visits += sourceVisits;
+      users += sourceUsers;
+      bounceWeighted += (Number(metrics.bounce) || 0) * sourceVisits;
+      timeWeighted += (Number(metrics.time) || 0) * sourceVisits;
+      newWeighted += (Number(metrics.newShare) || 0) * sourceUsers;
+      qualityWeighted += (Number(metrics.quality) || 0) * sourceVisits;
+      primaryWeighted += (Number(metrics.primary) || 0) * sourceVisits;
     }
-    return finishBucket(bucket);
+    return {
+      visits,
+      users,
+      bounce: visits ? bounceWeighted / visits : 0,
+      time: visits ? timeWeighted / visits : 0,
+      newShare: users ? newWeighted / users : 0,
+      quality: visits ? qualityWeighted / visits : 0,
+      primary: visits ? primaryWeighted / visits : 0
+    };
   }
 
   function median(values) {
@@ -543,15 +569,15 @@
     if (data.automation) { score += 30; reasons.push('обнаружен headless/automation браузер'); }
     if (data.unknownBrowserShare >= .4) { score += 15; reasons.push('высокая доля неизвестных браузеров'); }
     else if (data.unknownBrowserShare >= .15) score += 7;
-    if (data.topProfile.share >= .7 && data.tech.visits >= 500) { score += 19; reasons.push('один технический профиль доминирует'); }
-    else if (data.topProfile.share >= .45 && data.tech.visits >= 500) { score += 11; reasons.push('концентрация технического профиля'); }
-    if (data.topIp.share >= .2 && data.ip.visits >= 200) { score += 24; reasons.push('высокая концентрация одного IP'); }
-    else if (data.topIp.share >= .08 && data.ip.visits >= 200) { score += 13; reasons.push('концентрация одного IP'); }
-    if (data.topSubnet.share >= .35 && data.ip.visits >= 500) { score += 22; reasons.push('высокая концентрация подсети'); }
-    else if (data.topSubnet.share >= .18 && data.ip.visits >= 500) { score += 14; reasons.push('концентрация подсети'); }
+    if (data.concentrationScope !== 'daily' && data.topProfile.share >= .7 && data.tech.visits >= 500) { score += 19; reasons.push('один технический профиль доминирует'); }
+    else if (data.concentrationScope !== 'daily' && data.topProfile.share >= .45 && data.tech.visits >= 500) { score += 11; reasons.push('концентрация технического профиля'); }
+    if (data.concentrationScope !== 'daily' && data.topIp.share >= .2 && data.ip.visits >= 200) { score += 24; reasons.push('высокая концентрация одного IP'); }
+    else if (data.concentrationScope !== 'daily' && data.topIp.share >= .08 && data.ip.visits >= 200) { score += 13; reasons.push('концентрация одного IP'); }
+    if (data.concentrationScope !== 'daily' && data.topSubnet.share >= .35 && data.ip.visits >= 500) { score += 22; reasons.push('высокая концентрация подсети'); }
+    else if (data.concentrationScope !== 'daily' && data.topSubnet.share >= .18 && data.ip.visits >= 500) { score += 14; reasons.push('концентрация подсети'); }
 
     let clientIdScore = 0;
-    const enoughClientIds = data.clientIdVisits >= 300 && data.clientIdCoverage >= .5 && data.uniqueClientIds >= 20;
+    const enoughClientIds = data.concentrationScope !== 'daily' && data.clientIdVisits >= 300 && data.clientIdCoverage >= .5 && data.uniqueClientIds >= 20;
     if (enoughClientIds) {
       if (data.topClientId.share >= .3 && data.topClientId.value >= 100) { clientIdScore += 18; reasons.push(`один ClientID дал ${formatPct(data.topClientId.share)} визитов за период`); }
       else if (data.topClientId.share >= .15 && data.topClientId.value >= 50) { clientIdScore += 10; reasons.push('повышенная концентрация одного ClientID'); }
@@ -743,24 +769,117 @@
     return [...months.values()].sort((a, b) => a.month.localeCompare(b.month));
   }
 
+  function maxShareEntry(rows, field) {
+    return rows.reduce((best, row) => {
+      const candidate = row[field] || { key: '—', value: 0, share: 0 };
+      return (Number(candidate.share) || 0) > (Number(best.share) || 0) ? candidate : best;
+    }, { key: '—', value: 0, share: 0 });
+  }
+
+  function aggregateApiSnapshots(rows) {
+    const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+    const visits = rows.reduce((sum, row) => sum + number(row.visits), 0);
+    const techVisits = rows.reduce((sum, row) => sum + number(row.tech?.visits || row.visits), 0);
+    const ipVisits = rows.reduce((sum, row) => sum + number(row.ip?.visits || row.visits), 0);
+    const users = rows.reduce((sum, row) => sum + number(row.metrics?.users || row.visits), 0);
+    const weighted = (getter, weightGetter = (row) => number(row.visits)) => {
+      let total = 0;
+      let weight = 0;
+      for (const row of rows) {
+        const rowWeight = weightGetter(row);
+        total += number(getter(row)) * rowWeight;
+        weight += rowWeight;
+      }
+      return weight ? total / weight : 0;
+    };
+    const metrics = {
+      visits,
+      users,
+      bounce: weighted((row) => row.metrics?.bounce),
+      time: weighted((row) => row.metrics?.time),
+      newShare: weighted((row) => row.metrics?.newShare, (row) => number(row.metrics?.users || row.visits)),
+      quality: weighted((row) => row.metrics?.quality),
+      primary: weighted((row) => row.metrics?.primary)
+    };
+    const clientIdVisits = rows.reduce((sum, row) => sum + number(row.clientIdVisits), 0);
+    const uniqueClientIds = Math.max(0, ...rows.map((row) => number(row.uniqueClientIds)));
+    return {
+      visits,
+      tech: { ...metrics, visits: techVisits },
+      ip: { ...metrics, visits: ipVisits },
+      metrics,
+      topBrowser: maxShareEntry(rows, 'topBrowser'),
+      topResolution: maxShareEntry(rows, 'topResolution'),
+      topProfile: maxShareEntry(rows, 'topProfile'),
+      topIp: maxShareEntry(rows, 'topIp'),
+      topSubnet: maxShareEntry(rows, 'topSubnet'),
+      clientIdVisits,
+      uniqueClientIds,
+      topClientId: maxShareEntry(rows, 'topClientId'),
+      top10ClientShare: Math.max(0, ...rows.map((row) => number(row.top10ClientShare))),
+      visitsPerClientId: Math.max(0, ...rows.map((row) => number(row.visitsPerClientId))),
+      repeatClientVisitShare: weighted((row) => row.repeatClientVisitShare, (row) => number(row.clientIdVisits)),
+      clientIdCoverage: techVisits ? Math.min(1, clientIdVisits / techVisits) : 0,
+      ipv6Share: weighted((row) => row.ipv6Share, (row) => number(row.ip?.visits || row.visits)),
+      unknownBrowserShare: weighted((row) => row.unknownBrowserShare, (row) => number(row.tech?.visits || row.visits)),
+      cookieEnabledShare: weighted((row) => row.cookieEnabledShare),
+      automation: rows.some((row) => Boolean(row.automation)),
+      concentrationScope: 'daily',
+      dataSource: 'yandex-metrica-logs-api'
+    };
+  }
+
+  function buildApiSources(rows) {
+    const grouped = new Map();
+    for (const rawRow of rows || []) {
+      const name = String(rawRow.source || 'Не определено').trim() || 'Не определено';
+      const date = String(rawRow.date || '');
+      const visits = Number(rawRow.visits) || 0;
+      if (!date || visits <= 0) continue;
+      if (!grouped.has(name)) grouped.set(name, []);
+      grouped.get(name).push({ ...rawRow, source: name, date, visits, concentrationScope: 'daily' });
+    }
+    return [...grouped.entries()].map(([name, dailyRows]) => {
+      const days = new Map();
+      for (const day of dailyRows) {
+        days.set(day.date, { date: day.date, precomputedSnapshot: day });
+      }
+      return {
+        name,
+        days,
+        precomputedSnapshot: aggregateApiSnapshots(dailyRows)
+      };
+    });
+  }
+
+  function analyzeSources(allSources, context = {}) {
+    const sourceVolumes = allSources.map((source) => ({ source, visits: snapshot(source).visits }));
+    const includedSources = sourceVolumes.filter((item) => item.visits >= MIN_SOURCE_VISITS);
+    const excludedSources = sourceVolumes.filter((item) => item.visits < MIN_SOURCE_VISITS);
+    const sources = includedSources.map((item) => item.source);
+    if (!sources.length) throw new Error(`После очистки данных не осталось площадок с ${MIN_SOURCE_VISITS} и более визитами за период.`);
+
+    state.dataMode = context.mode || 'manual';
+    state.analysisContext = context.label || '';
+    if (excludedSources.length) {
+      const excludedVisits = excludedSources.reduce((sum, item) => sum + item.visits, 0);
+      const excludedText = `исключено ${excludedSources.length} ${plural(excludedSources.length, 'площадка', 'площадки', 'площадок')} и ${formatInt(excludedVisits)} визитов с объёмом менее ${MIN_SOURCE_VISITS}`;
+      state.analysisContext = [state.analysisContext, excludedText].filter(Boolean).join(' · ');
+      if (state.dataMode !== 'api') showValidation(excludedText, false);
+    }
+
+    const base = buildBase(sources);
+    state.results = sources.map((source) => combineSource(source, base)).sort((a, b) => b.score - a.score || b.visits - a.visits);
+    state.dailyResults = state.results.flatMap((source) => source.days).sort((a, b) => b.score - a.score || b.date.localeCompare(a.date));
+    state.monthlyResults = buildMonthly(state.dailyResults);
+    renderResults(base);
+    ui.results.hidden = false;
+    ui.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   function analyze() {
     try {
-      const sourceVolumes = buildAggregates().map((source) => ({ source, visits: snapshot(source).visits }));
-      const includedSources = sourceVolumes.filter((item) => item.visits >= MIN_SOURCE_VISITS);
-      const excludedSources = sourceVolumes.filter((item) => item.visits < MIN_SOURCE_VISITS);
-      const sources = includedSources.map((item) => item.source);
-      if (!sources.length) throw new Error(`После очистки данных не осталось площадок с ${MIN_SOURCE_VISITS} и более визитами за период.`);
-      if (excludedSources.length) {
-        const excludedVisits = excludedSources.reduce((sum, item) => sum + item.visits, 0);
-        showValidation(`Исключено ${excludedSources.length} ${plural(excludedSources.length, 'площадка', 'площадки', 'площадок')} с объёмом менее ${MIN_SOURCE_VISITS} визитов за период (${formatInt(excludedVisits)} визитов).`, false);
-      }
-      const base = buildBase(sources);
-      state.results = sources.map((source) => combineSource(source, base)).sort((a, b) => b.score - a.score || b.visits - a.visits);
-      state.dailyResults = state.results.flatMap((source) => source.days).sort((a, b) => b.score - a.score || b.date.localeCompare(a.date));
-      state.monthlyResults = buildMonthly(state.dailyResults);
-      renderResults(base);
-      ui.results.hidden = false;
-      ui.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      analyzeSources(buildAggregates(), { mode: 'manual', label: 'Ручные выгрузки' });
     } catch (error) {
       showValidation(error.message, true);
     }
@@ -820,14 +939,17 @@
       ['Аномальные дни', formatInt(anomalousDays.length), `${highDays.length} высокого риска`],
       ['Источники высокого риска', formatInt(highSources.length), 'по периоду и дням'],
       ['Средний отказ', formatPct(base.bounce), 'по всей базе'],
-      ['Покрытие файлов', formatPct(coverage), 'совпадение объёмов']
+      state.dataMode === 'api'
+        ? ['Источник данных', 'Logs API', 'без ограничения CSV']
+        : ['Покрытие файлов', formatPct(coverage), 'совпадение объёмов']
     ].map(([label, value, note]) => `<article class="kpi"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`).join('');
 
     const conclusion = anomalousDays.length
       ? `Найдено ${anomalousDays.length} ${plural(anomalousDays.length, 'аномальное сочетание источника и дня', 'аномальных сочетания источника и дня', 'аномальных сочетаний источника и дня')}. В оценочный объём вошло ${formatInt(flaggedVisits)} визитов, совершённых в эти дни. Это объём под проверкой, а не точное число фродовых визитов.`
       : 'Однодневных отклонений с достаточной выборкой не найдено. Каждый день сравнивался с остальными днями того же источника.';
     ui.conclusion.innerHTML = `<strong>Общий вывод</strong>${escapeHtml(conclusion)}`;
-    ui.summary.textContent = `Проанализировано ${formatInt(totalVisits)} визитов по ${state.results.length} источникам и ${state.dailyResults.length} дневным срезам.`;
+    const contextText = state.analysisContext ? ` ${state.analysisContext}.` : '';
+    ui.summary.textContent = `Проанализировано ${formatInt(totalVisits)} визитов по ${state.results.length} источникам и ${state.dailyResults.length} дневным срезам.${contextText}`;
     if (ui.dailySummary) ui.dailySummary.textContent = `День считается аномальным только относительно остальных дней того же источника. Минимальная база — 5 дней.`;
 
     renderMonthly();
@@ -887,6 +1009,12 @@
     const dailyRows = row.anomalousDays.length
       ? row.anomalousDays.map((day) => `<tr><td>${escapeHtml(formatDate(day.date))}</td><td>${formatInt(day.visits)}</td><td>${formatPct(day.metrics.bounce)}</td><td>${formatDuration(day.metrics.time)}</td><td>${day.clientIdVisits ? `${formatInt(day.uniqueClientIds)} / ${formatPct(day.topClientId.share)}` : '—'}</td><td><span class="risk-pill ${day.risk}">${day.score}/100</span></td><td>${escapeHtml(day.reasons.slice(0, 3).join(' · '))}</td></tr>`).join('')
       : '<tr><td colspan="7">Аномальных дней с достаточной выборкой не найдено.</td></tr>';
+    const dailyConcentrations = row.concentrationScope === 'daily';
+    const ipTitle = dailyConcentrations ? 'IP и подсети — максимум за день' : 'IP и подсети за период';
+    const techTitle = dailyConcentrations ? 'Технический профиль — максимум за день' : 'Технический профиль';
+    const clientTitle = dailyConcentrations ? 'ClientID — дневные максимумы' : 'ClientID за период';
+    const uniqueClientLabel = dailyConcentrations ? 'Макс. уникальных за день' : 'Уникальных ClientID';
+    const visitsPerClientLabel = dailyConcentrations ? 'Макс. визитов на ClientID' : 'Визитов на ClientID';
     return `<details class="source-card ${row.risk}" id="source-${slug(row.name)}" data-risk="${row.risk}" data-name="${escapeHtml(row.name.toLowerCase())}" data-scope="source-card" ${index < 3 || row.risk !== 'low' ? 'open' : ''}>
       <summary>
         <div><span class="section-kicker">UTM Source</span><h3>${escapeHtml(row.name)}</h3><p>${escapeHtml(reasons.slice(0, 4).join(' · '))}</p></div>
@@ -904,9 +1032,9 @@
         <section class="daily-detail"><h4>Конкретные аномальные даты</h4><div class="table-wrap mini-table-wrap"><table class="mini-table"><thead><tr><th>Дата</th><th>Визиты</th><th>Отказы</th><th>Время</th><th>ClientID: уник. / топ-1</th><th>Score</th><th>Причины</th></tr></thead><tbody>${dailyRows}</tbody></table></div></section>
         <div class="detail-grid">
           <section class="detail"><h4>Почему такой score</h4><ul class="flag-list">${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul></section>
-          <section class="detail"><h4>IP и подсети за период</h4><p><b>Топ IP:</b> ${escapeHtml(maskIp(row.topIp.key))} · ${formatPct(row.topIp.share)}</p><p><b>Топ подсеть:</b> ${escapeHtml(row.topSubnet.key)} · ${formatPct(row.topSubnet.share)}</p></section>
-          <section class="detail"><h4>Технический профиль</h4><p><b>Топ браузер:</b> ${escapeHtml(row.topBrowser.key)} · ${formatPct(row.topBrowser.share)}</p><p><b>Топ связка:</b> ${escapeHtml(shorten(row.topProfile.key, 100))} · ${formatPct(row.topProfile.share)}</p></section>
-          <section class="detail"><h4>ClientID за период</h4>${row.clientIdVisits ? `<p><b>Покрытие:</b> ${formatPct(row.clientIdCoverage)}</p><p><b>Уникальных ClientID:</b> ${formatInt(row.uniqueClientIds)}</p><p><b>Визитов на ClientID:</b> ${row.visitsPerClientId.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p><p><b>Топ-1 / топ-10:</b> ${formatPct(row.topClientId.share)} / ${formatPct(row.top10ClientShare)}</p>` : '<p>ClientID не найден в загруженных выгрузках.</p>'}</section>
+          <section class="detail"><h4>${ipTitle}</h4><p><b>Топ IP:</b> ${escapeHtml(maskIp(row.topIp.key))} · ${formatPct(row.topIp.share)}</p><p><b>Топ подсеть:</b> ${escapeHtml(row.topSubnet.key)} · ${formatPct(row.topSubnet.share)}</p></section>
+          <section class="detail"><h4>${techTitle}</h4><p><b>Топ браузер:</b> ${escapeHtml(row.topBrowser.key)} · ${formatPct(row.topBrowser.share)}</p><p><b>Топ связка:</b> ${escapeHtml(shorten(row.topProfile.key, 100))} · ${formatPct(row.topProfile.share)}</p></section>
+          <section class="detail"><h4>${clientTitle}</h4>${row.clientIdVisits ? `<p><b>Покрытие:</b> ${formatPct(row.clientIdCoverage)}</p><p><b>${uniqueClientLabel}:</b> ${formatInt(row.uniqueClientIds)}</p><p><b>${visitsPerClientLabel}:</b> ${row.visitsPerClientId.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p><p><b>Макс. топ-1 / топ-10:</b> ${formatPct(row.topClientId.share)} / ${formatPct(row.top10ClientShare)}</p>` : '<p>ClientID не найден в выбранных данных.</p>'}</section>
           <section class="detail"><h4>Покрытие</h4><p><b>Техническая выгрузка:</b> ${formatInt(row.tech.visits)} визитов</p><p><b>IP-выгрузка:</b> ${formatInt(row.ip.visits)} визитов</p><p><b>Дней:</b> ${row.days.length}</p></section>
           <section class="detail detail--action"><h4>Рекомендация</h4><p>${escapeHtml(row.action)}</p></section>
         </div>
@@ -967,6 +1095,8 @@
     state.results = [];
     state.dailyResults = [];
     state.monthlyResults = [];
+    state.analysisContext = '';
+    state.dataMode = 'manual';
     ui.ipFile.value = '';
     ui.techFile.value = '';
     setCard('ip', 'idle', 'Файл не выбран', 'Поддерживаются CSV, XLSX и XLS.');
@@ -1013,6 +1143,15 @@
     updateAnalyzeState();
     analyze();
   }
+
+  window.FraudLab = Object.freeze({
+    analyzeApiRows(rows, options = {}) {
+      const sources = buildApiSources(rows);
+      if (!sources.length) throw new Error('API не вернуло данных для выбранного периода.');
+      analyzeSources(sources, { ...options, mode: 'api' });
+      return { sources: state.results.length, days: state.dailyResults.length };
+    }
+  });
 
   ui.ipFile?.addEventListener('change', (event) => handleFile('ip', event.target.files?.[0]));
   ui.techFile?.addEventListener('change', (event) => handleFile('tech', event.target.files?.[0]));
