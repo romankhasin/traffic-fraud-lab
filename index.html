@@ -3,12 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Локальная проверка выгрузок Яндекс Метрики на признаки фрода и низкокачественного трафика">
+  <meta name="description" content="Локальная проверка дневных выгрузок Яндекс Метрики на признаки фрода и низкокачественного трафика">
   <title>Traffic Fraud Lab · Level Digital Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/daily.css">
 </head>
 <body>
   <header class="hub-nav">
@@ -32,10 +33,10 @@
       <div>
         <div class="eyebrow">Level Group · Traffic Quality</div>
         <h1>Traffic Fraud Lab</h1>
-        <p class="hero__lead">Загрузите две выгрузки Яндекс Метрики. Инструмент объединит данные по источникам, найдёт поведенческие, IP- и технические аномалии и сформирует прозрачный рейтинг риска.</p>
+        <p class="hero__lead">Загрузите две дневные выгрузки Яндекс Метрики. Инструмент сравнит каждый день источника с его остальными днями, найдёт локальные всплески и сформирует оценку объёма трафика под проверкой.</p>
         <div class="hero__chips">
-          <span>CSV / XLSX</span>
-          <span>Risk score 0–100</span>
+          <span>Источник × день</span>
+          <span>Медиана + MAD</span>
           <span>Локальная обработка</span>
         </div>
       </div>
@@ -54,8 +55,8 @@
       <div class="section-head">
         <div>
           <span class="section-kicker">Шаг 1</span>
-          <h2>Загрузите выгрузки</h2>
-          <p>Названия столбцов могут немного отличаться — система попробует сопоставить их автоматически.</p>
+          <h2>Загрузите дневные выгрузки</h2>
+          <p>В обоих файлах обязательна отдельная колонка с датой визита. Поддерживаются значения вида 25.07.2026 и 2026-07-25.</p>
         </div>
         <button class="button button--ghost" id="demo-button" type="button">Показать демо</button>
       </div>
@@ -66,8 +67,8 @@
             <span class="upload-card__number">01</span>
             <span class="status-pill" id="ip-status">Файл не выбран</span>
           </div>
-          <h3>Источник + IP</h3>
-          <p>UTM Source, IP-адрес, визиты, отказы, время и при наличии конверсии.</p>
+          <h3>Дата + источник + IP</h3>
+          <p>Дата визита, UTM Source, IP-адрес, визиты, отказы, время и при наличии конверсии.</p>
           <label class="file-picker">
             <input id="ip-file" type="file" accept=".csv,.xlsx,.xls">
             <span>Выбрать IP-выгрузку</span>
@@ -81,8 +82,8 @@
             <span class="upload-card__number">02</span>
             <span class="status-pill" id="tech-status">Файл не выбран</span>
           </div>
-          <h3>Источник + техника</h3>
-          <p>Браузер, ОС, устройство, разрешение, визиты, отказы и время.</p>
+          <h3>Дата + источник + техника</h3>
+          <p>Дата визита, браузер, ОС, устройство, разрешение, визиты, отказы и время.</p>
           <label class="file-picker">
             <input id="tech-file" type="file" accept=".csv,.xlsx,.xls">
             <span>Выбрать техническую выгрузку</span>
@@ -94,9 +95,9 @@
 
       <div class="validation" id="validation" hidden></div>
       <div class="actions-row">
-        <button class="button button--primary" id="analyze-button" type="button" disabled>Запустить анализ</button>
+        <button class="button button--primary" id="analyze-button" type="button" disabled>Запустить дневной анализ</button>
         <button class="button button--ghost" id="reset-button" type="button">Очистить</button>
-        <span class="actions-row__note">Для полноценной проверки нужны оба файла.</span>
+        <span class="actions-row__note">Для сравнения желательно не менее 5 дней по источнику.</span>
       </div>
     </section>
 
@@ -104,17 +105,51 @@
       <div class="section-head section-head--results">
         <div>
           <span class="section-kicker">Результат</span>
-          <h2>Обзор качества трафика</h2>
+          <h2>Дневной мониторинг качества трафика</h2>
           <p id="summary-text">Расчёт завершён.</p>
         </div>
-        <button class="button button--ghost" id="export-button" type="button">Скачать CSV</button>
+        <button class="button button--ghost" id="export-button" type="button">Скачать дневной CSV</button>
       </div>
 
       <div class="kpi-grid" id="kpi-grid"></div>
-
       <section class="conclusion" id="conclusion"></section>
 
-      <section class="panel panel--compact">
+      <section class="panel panel--compact results-subsection">
+        <div class="section-head">
+          <div>
+            <span class="section-kicker">По месяцам</span>
+            <h2>Оценка объёма под проверкой</h2>
+            <p>Суммируются визиты в сочетаниях «источник × день», получивших средний или высокий риск.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="monthly-table">
+            <thead>
+              <tr>
+                <th>Месяц</th>
+                <th>Всего визитов</th>
+                <th>Визиты в аномальные дни</th>
+                <th>Доля</th>
+                <th>Дни высокого риска</th>
+                <th>Дни для проверки</th>
+                <th>Источники</th>
+              </tr>
+            </thead>
+            <tbody id="monthly-table"></tbody>
+          </table>
+        </div>
+        <div class="daily-warning">Это оценка объёма трафика, попавшего в аномальные дни. Без уникального VisitID она не равна точному количеству доказанных фродовых визитов.</div>
+      </section>
+
+      <section class="panel panel--compact results-subsection">
+        <div class="daily-intro">
+          <div>
+            <span class="section-kicker">Источник × день</span>
+            <h3>Все дневные срезы</h3>
+            <p id="daily-summary">Каждый день сравнивается с остальными днями того же источника.</p>
+          </div>
+          <div class="daily-note">Для устойчивой базы используются медиана и MAD. Проверяемый день исключается из собственной базы сравнения.</div>
+        </div>
         <div class="toolbar">
           <div class="filter-group" role="group" aria-label="Фильтр риска">
             <button class="filter-button active" type="button" data-risk="all">Все</button>
@@ -124,17 +159,44 @@
           </div>
           <input class="search-input" id="source-search" type="search" placeholder="Поиск по источнику">
         </div>
+        <div class="table-wrap">
+          <table class="daily-table">
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>Источник</th>
+                <th>Визиты</th>
+                <th>Обычный день</th>
+                <th>Отказы</th>
+                <th>Время</th>
+                <th>Риск</th>
+                <th>Score</th>
+                <th>Причины</th>
+              </tr>
+            </thead>
+            <tbody id="daily-table"></tbody>
+          </table>
+        </div>
+      </section>
 
+      <section class="panel panel--compact results-subsection">
+        <div class="section-head">
+          <div>
+            <span class="section-kicker">Источники</span>
+            <h2>Итоговый рейтинг площадок</h2>
+            <p>Итоговый score учитывает как весь период, так и максимальное однодневное отклонение.</p>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Источник</th>
                 <th>Визиты</th>
+                <th>Аномальные дни</th>
+                <th>Визиты под проверкой</th>
                 <th>Отказы</th>
                 <th>Время</th>
-                <th>Топ подсеть</th>
-                <th>Топ техпрофиль</th>
                 <th>Риск</th>
                 <th>Score</th>
               </tr>
@@ -151,28 +213,28 @@
       <div class="section-head">
         <div>
           <span class="section-kicker">Методика</span>
-          <h2>Как формируется оценка</h2>
-          <p>Высокий риск появляется только при сочетании нескольких независимых признаков. Один высокий отказ или одна подсеть сами по себе не доказывают фрод.</p>
+          <h2>Как определяется аномальный день</h2>
+          <p>День сравнивается не со всеми площадками, а только с другими днями того же источника. Один показатель не является достаточным доказательством фрода.</p>
         </div>
       </div>
       <div class="method-grid">
-        <article><span>01</span><h3>Поведение</h3><p>Отказы, время на сайте, доля новых пользователей и отклонение от общего уровня.</p></article>
-        <article><span>02</span><h3>IP и подсети</h3><p>Концентрация визитов на одном IP, IPv4 /24 и приближённой IPv6 /64.</p></article>
-        <article><span>03</span><h3>Техника</h3><p>Headless, unknown, однотипные браузеры, ОС, устройства и разрешения.</p></article>
-        <article><span>04</span><h3>Конверсии</h3><p>Отсутствие качественных действий или аномальные значения относительно общей базы.</p></article>
+        <article><span>01</span><h3>Дневная база</h3><p>Для каждого источника строится обычный уровень визитов, отказов, времени, конверсий и концентраций.</p></article>
+        <article><span>02</span><h3>Устойчивое сравнение</h3><p>Используются медиана и MAD, поэтому один резкий всплеск не искажает базовую линию.</p></article>
+        <article><span>03</span><h3>Независимые признаки</h3><p>Поведение сопоставляется с IP, подсетями, браузерами, устройствами и техническими профилями.</p></article>
+        <article><span>04</span><h3>Оценка объёма</h3><p>Визиты дня со средним или высоким риском маркируются как трафик под проверкой и суммируются по месяцам.</p></article>
       </div>
-      <div class="method-note"><strong>Важно:</strong> score используется для приоритизации ручной проверки и запроса детализации у площадки. Он не является юридическим доказательством фрода.</div>
+      <div class="method-note"><strong>Важно:</strong> дневной score используется для приоритизации ручной проверки. Весь объём аномального дня не считается автоматически фродом.</div>
     </section>
   </main>
 
   <footer>
     <div class="shell footer-inner">
       <span><strong>Traffic Fraud Lab</strong> · Level Digital Hub</span>
-      <span>MVP 0.1 · локальная обработка</span>
+      <span>MVP 0.2 · дневной мониторинг · локальная обработка</span>
     </div>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="assets/app.js"></script>
+  <script src="assets/app-v2.js"></script>
 </body>
 </html>
