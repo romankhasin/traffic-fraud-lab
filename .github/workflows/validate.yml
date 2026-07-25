@@ -65,5 +65,16 @@ jobs:
           grep -q "Уникальные ClientID" assets/app-v2.js
           grep -q "IP + ClientID" index.html
           grep -q "ClientID не отправляются на сервер" index.html
-          grep -q "MVP 0.4" index.html
-          grep -q "Что умеет версия 0.4" README.md
+      - name: Check ClientID text parsing and source filter
+        run: |
+          grep -q "cellDates: true, raw: true" assets/app-v2.js
+          grep -q "function coerceClientIdsToText" assets/app-v2.js
+          grep -q "String(value).trim()" assets/app-v2.js
+          grep -q "coerceClientIdsToText(rows, map)" assets/app-v2.js
+          grep -q "const MIN_SOURCE_VISITS = 20" assets/app-v2.js
+          grep -q "item.visits >= MIN_SOURCE_VISITS" assets/app-v2.js
+          grep -q "item.visits < MIN_SOURCE_VISITS" assets/app-v2.js
+          grep -q "менее чем 20 визитами за период исключаются" index.html
+          grep -q "суммарным объёмом менее 20 визитов" README.md
+          grep -q "MVP 0.5" index.html
+          grep -q "Что умеет версия 0.5" README.md
