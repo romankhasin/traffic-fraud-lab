@@ -14,22 +14,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
       - name: Check JavaScript syntax
-        run: |
-          node --check assets/app-v2.js
-          node --check assets/pdf-export.js
+        run: node --check assets/app-v2.js
       - name: Check required files and analysis logic
         run: |
           test -f index.html
           test -f assets/styles.css
           test -f assets/daily.css
-          test -f assets/pdf.css
           test -f assets/app-v2.js
-          test -f assets/pdf-export.js
+          test ! -f assets/pdf.css
+          test ! -f assets/pdf-export.js
           grep -q "assets/styles.css" index.html
           grep -q "assets/daily.css" index.html
-          grep -q "assets/pdf.css" index.html
           grep -q "assets/app-v2.js" index.html
-          grep -q "assets/pdf-export.js" index.html
           grep -q "monthly-table" index.html
           ! grep -q "Все дневные срезы" index.html
           ! grep -q "class=\"daily-table\"" index.html
@@ -42,13 +38,14 @@ jobs:
           grep -q "timeSample.length >= 6" assets/app-v2.js
           grep -q "timeRatio <= .45" assets/app-v2.js
           grep -q "timeZ >= 3.5" assets/app-v2.js
-          ! grep -q "очень короткое время за период" assets/app-v2.js
-          ! grep -q "короткое время за период" assets/app-v2.js
-          grep -q "pdf-export-button" index.html
-          grep -q "pdf-scope-selected" index.html
-          grep -q "html2canvas" index.html
-          grep -q "jspdf" index.html
-          grep -q "function selectedCards" assets/pdf-export.js
-          grep -q "function sourcePeriodTime" assets/pdf-export.js
-          grep -q "label: 'среднее время'" assets/pdf-export.js
-          grep -q "async function exportPdf" assets/pdf-export.js
+          grep -q "bounceDrop >= .2" assets/app-v2.js
+          grep -q "подозрительно низкие отказы" assets/app-v2.js
+          grep -q "day.metrics.time >= 600" assets/app-v2.js
+          grep -q "timeRatio >= 3" assets/app-v2.js
+          grep -q "подозрительно высокое среднее время" assets/app-v2.js
+          ! grep -q "аномально низкий отказ за период" assets/app-v2.js
+          ! grep -q "pdf-export-button" index.html
+          ! grep -q "assets/pdf.css" index.html
+          ! grep -q "assets/pdf-export.js" index.html
+          ! grep -q "html2canvas" index.html
+          ! grep -q "jspdf" index.html

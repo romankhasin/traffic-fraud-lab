@@ -427,7 +427,6 @@
 
     if (m.bounce >= .78 || m.bounce - base.bounce >= .28) { score += 24; reasons.push('сильно повышенный отказ за период'); }
     else if (m.bounce >= .62 || m.bounce - base.bounce >= .18) { score += 16; reasons.push('повышенный отказ за период'); }
-    if (m.bounce <= .01 && data.visits >= 200) { score += 16; reasons.push('аномально низкий отказ за период'); }
     if (m.newShare >= .995) { score += 9; reasons.push('практически весь трафик новый'); }
     if (base.quality > 0 && m.quality < base.quality * .15 && data.visits >= 1500) { score += 7; reasons.push('почти нет качественных конверсий'); }
     if (base.primary > 0 && m.primary > base.primary * 4 && data.visits >= 500) { score += 9; reasons.push('аномально высокая первичная конверсия'); }
@@ -481,11 +480,21 @@
         if (visitRatio >= 2.5 && visitZ >= 3) { score += 22; reasons.push(`всплеск объёма: ×${visitRatio.toFixed(1)} к обычному дню`); }
         else if (visitRatio >= 1.8 && visitZ >= 2.5) { score += 13; reasons.push(`повышенный объём: ×${visitRatio.toFixed(1)}`); }
 
+        const bounceSample = sample((item) => item.metrics.bounce);
         const bounceDiff = day.metrics.bounce - baseline.bounce;
-        const bounceZ = robustZ(day.metrics.bounce, sample((item) => item.metrics.bounce), .02);
-        if (bounceDiff >= .2 && bounceZ >= 2.5) { score += 22; reasons.push(`отказы выше обычного на ${formatPct(bounceDiff)}`); }
+        const bounceZ = robustZ(day.metrics.bounce, bounceSample, .02);
+        const enoughBounceVolume = day.visits >= Math.max(100, baseline.visits * .15);
+        if (bounceDiff >= .2 && bounceZ >= 2.5) { score += 22; reasons.push(`отказы выше медианы на ${formatPct(bounceDiff)}`); }
         else if (bounceDiff >= .12 && bounceZ >= 2.5) { score += 15; reasons.push(`скачок отказов на ${formatPct(bounceDiff)}`); }
-        if (day.metrics.bounce <= .01 && baseline.bounce >= .08 && day.visits >= 150) { score += 14; reasons.push('аномально низкий отказ в этот день'); }
+
+        const bounceDrop = baseline.bounce - day.metrics.bounce;
+        if (enoughBounceVolume && baseline.bounce >= .08 && bounceDrop >= .2 && bounceZ >= 3.5) {
+          score += 22;
+          reasons.push(`подозрительно низкие отказы: ${formatPct(day.metrics.bounce)} против медианы ${formatPct(baseline.bounce)}`);
+        } else if (enoughBounceVolume && baseline.bounce >= .08 && bounceDrop >= .12 && bounceZ >= 3) {
+          score += 14;
+          reasons.push(`отказы аномально ниже медианы на ${formatPct(bounceDrop)}`);
+        }
 
         const timeSample = sample((item) => item.metrics.time).filter((value) => value > 0);
         const timeRatio = ratio(day.metrics.time, baseline.time);
@@ -498,6 +507,12 @@
         } else if (enoughTimeHistory && enoughTimeVolume && day.metrics.time > 0 && baseline.time >= 30 && timeRatio <= .6 && timeZ >= 3) {
           score += 14;
           reasons.push(`сильное падение среднего времени: ${Math.round(timeRatio * 100)}% медианы площадки`);
+        } else if (enoughTimeHistory && enoughTimeVolume && day.metrics.time >= 600 && baseline.time >= 30 && timeRatio >= 3 && timeZ >= 3.5) {
+          score += 24;
+          reasons.push(`подозрительно высокое среднее время: ${formatDuration(day.metrics.time)} против медианы ${formatDuration(baseline.time)}`);
+        } else if (enoughTimeHistory && enoughTimeVolume && day.metrics.time >= 300 && baseline.time >= 30 && timeRatio >= 2 && timeZ >= 3) {
+          score += 14;
+          reasons.push(`среднее время аномально выше медианы: ×${timeRatio.toFixed(1)}`);
         }
 
         const newDiff = day.metrics.newShare - baseline.newShare;
