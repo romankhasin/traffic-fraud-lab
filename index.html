@@ -67,8 +67,8 @@
             <span class="upload-card__number">01</span>
             <span class="status-pill" id="ip-status">Файл не выбран</span>
           </div>
-          <h3>Дата + источник + IP + ClientID</h3>
-          <p>Дата визита, UTM Source, IP-адрес, ClientID, визиты, отказы, время и при наличии конверсии. ClientID также можно добавить в техническую выгрузку; идентификатор читается как текст.</p>
+          <h3>Дата + источник + IP</h3>
+          <p>Дата визита, UTM Source, IP-адрес, визиты, отказы, время и при наличии конверсии. ClientID в этой выгрузке не требуется.</p>
           <label class="file-picker">
             <input id="ip-file" type="file" accept=".csv,.xlsx,.xls">
             <span>Выбрать IP-выгрузку</span>
@@ -82,8 +82,8 @@
             <span class="upload-card__number">02</span>
             <span class="status-pill" id="tech-status">Файл не выбран</span>
           </div>
-          <h3>Дата + источник + техника</h3>
-          <p>Дата визита, браузер, ОС, устройство, разрешение, визиты, отказы и время.</p>
+          <h3>Дата + источник + техника + ClientID</h3>
+          <p>Дата визита, ClientID, браузер, ОС, устройство, разрешение, визиты, отказы и время. ClientID читается как текст и учитывается только из этого файла.</p>
           <label class="file-picker">
             <input id="tech-file" type="file" accept=".csv,.xlsx,.xls">
             <span>Выбрать техническую выгрузку</span>
