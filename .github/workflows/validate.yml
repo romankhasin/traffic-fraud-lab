@@ -32,11 +32,24 @@ jobs:
           grep -q "Оценка конкретных визитов" assets/app-v2.js
           grep -q "VisitID высокий риск" assets/app-v2.js
           grep -q "Сумма подозрительных VisitID" index.html
-          grep -q "Что умеет версия 0.7" README.md
+          grep -q "Что умеет версия 0.8" README.md
           grep -q "один раз в итоговом количестве" README.md
           test ! -f scripts/apply_visit_risk_ui.py
           test ! -f .github/workflows/apply-visit-risk-ui.yml
           test ! -f scripts/.visit-risk-ui-trigger
+
+      - name: Check scoring stage 1
+        run: |
+          grep -q "function automationSignal" assets/app-v2.js
+          grep -q "function capScoreByFamilies" assets/app-v2.js
+          grep -q "automationVisits" assets/app-v2.js
+          grep -q "аномально низкие отказы как слабый подтверждающий сигнал" assets/app-v2.js
+          grep -q "addSignal(networkScore, 'network'" assets/app-v2.js
+          grep -q "clientCoverage < .35" assets/app-v2.js
+          grep -q "Объёмная значимость сигналов" index.html
+          grep -q "Мультисигнальный score" index.html
+          test ! -f scripts/apply_scoring_stage1.py
+          test ! -f .github/workflows/apply-scoring-stage1.yml
 
       - name: Check API controls and campaign filter
         run: |
@@ -54,7 +67,6 @@ jobs:
           grep -q "В анализ входят только кампании" assets/api-mode.js
           grep -Fq 'campaign ${campaignFilterLabel()}' assets/api-mode.js
           grep -q "function scoreDailyDays" assets/app-v2.js
-          grep -q "подозрительно низкие отказы" assets/app-v2.js
           grep -q "подозрительно высокое среднее время" assets/app-v2.js
           grep -q "score += Math.min(28, clientIdScore)" assets/app-v2.js
           grep -q "const MIN_SOURCE_VISITS = 20" assets/app-v2.js
