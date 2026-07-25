@@ -49,4 +49,6 @@ jobs:
           grep -q "html2canvas" index.html
           grep -q "jspdf" index.html
           grep -q "function selectedCards" assets/pdf-export.js
+          grep -q "function sourcePeriodTime" assets/pdf-export.js
+          grep -q "label: 'среднее время'" assets/pdf-export.js
           grep -q "async function exportPdf" assets/pdf-export.js
