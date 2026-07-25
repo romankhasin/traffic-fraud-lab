@@ -1,0 +1,24 @@
+name: Validate static app
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Check JavaScript syntax
+        run: node --check assets/app.js
+      - name: Check required files
+        run: |
+          test -f index.html
+          test -f assets/styles.css
+          test -f assets/app.js
+          grep -q "assets/styles.css" index.html
+          grep -q "assets/app.js" index.html
