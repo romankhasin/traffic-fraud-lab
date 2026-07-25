@@ -5,8 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   validate:
@@ -14,10 +13,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-      - name: Apply ClientID update
-        run: python scripts/apply_client_id_analysis.py
       - name: Check JavaScript syntax
         run: node --check assets/app-v2.js
       - name: Check required files and analysis logic
@@ -68,13 +63,7 @@ jobs:
           grep -q "ClientID за период" assets/app-v2.js
           grep -q "ClientID: уник. / топ-1" assets/app-v2.js
           grep -q "Уникальные ClientID" assets/app-v2.js
+          grep -q "IP + ClientID" index.html
+          grep -q "ClientID не отправляются на сервер" index.html
+          grep -q "MVP 0.4" index.html
           grep -q "Что умеет версия 0.4" README.md
-      - name: Commit application changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/app-v2.js index.html README.md
-          if ! git diff --cached --quiet; then
-            git commit -m "Add ClientID signals to fraud analysis"
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          fi
