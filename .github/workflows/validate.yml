@@ -26,7 +26,9 @@ jobs:
           if grep -q "function automationSignal" assets/app-v2.js; then
             echo "Scoring stage 1 already applied"
           else
-            python scripts/apply_scoring_stage1.py
+            python scripts/apply_scoring_stage1.py || true
+            grep -q "function automationSignal" assets/app-v2.js
+            grep -q "function capScoreByFamilies" assets/app-v2.js
           fi
 
       - name: Commit migration to PR branch
