@@ -19,9 +19,12 @@ jobs:
           node --check assets/app-v2.js
           node --check assets/api-mode.js
           node --check scripts/validate_api_runtime.js
+          node --check scripts/validate_clientid_representative.js
 
       - name: Run API analysis runtime test
-        run: node scripts/validate_api_runtime.js
+        run: |
+          node scripts/validate_api_runtime.js
+          node scripts/validate_clientid_representative.js
 
       - name: Check visit-risk UI integration
         run: |
@@ -58,8 +61,13 @@ jobs:
           grep -q "Минимальное дневное покрытие" assets/api-mode.js
           grep -q "Высокое покрытие повышает надёжность оценки и не является фрод-сигналом" assets/api-mode.js
           grep -q "Максимумы могут относиться к разным датам" assets/api-mode.js
+          grep -q "representativeThreshold" assets/api-mode.js
+          grep -q "Выборка:.*визитов с ClientID" assets/api-mode.js
+          grep -q "недостаточно репрезентативных дневных данных" assets/api-mode.js
           grep -q "lowCoverageDays !== 1" scripts/validate_api_runtime.js
           grep -q "minCoverage.date !== '2026-07-02'" scripts/validate_api_runtime.js
+          grep -q "Tiny day distorted top-1 maximum" scripts/validate_clientid_representative.js
+          grep -q "Tiny-only source should have no representative maxima" scripts/validate_clientid_representative.js
 
       - name: Check API controls and campaign filter
         run: |

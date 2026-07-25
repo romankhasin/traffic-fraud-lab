@@ -68,10 +68,24 @@
   const selectedFiles = (counter, from, to) => (counter.files || [])
     .filter((file) => file.from && file.to && file.to >= from && file.from <= to);
 
+  const median = (values) => {
+    const safe = values.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+    if (!safe.length) return 0;
+    const middle = Math.floor(safe.length / 2);
+    return safe.length % 2 ? safe[middle] : (safe[middle - 1] + safe[middle]) / 2;
+  };
+
   const maxBy = (rows, getter) => rows.reduce((best, row) => {
     const value = Number(getter(row)) || 0;
-    return !best || value > best.value ? { value, date: String(row.date || '') } : best;
-  }, null) || { value: 0, date: '' };
+    return !best || value > best.value
+      ? {
+          value,
+          date: String(row.date || ''),
+          sampleVisits: Number(row.clientIdVisits) || 0,
+          uniqueClientIds: Number(row.uniqueClientIds) || 0
+        }
+      : best;
+  }, null) || { value: 0, date: '', sampleVisits: 0, uniqueClientIds: 0 };
 
   const coverageLevel = (coverage) => {
     if (coverage >= .95) return 'высокое';
@@ -107,19 +121,38 @@
         !lowest || row.value < lowest.value ? row : lowest
       ), null) || { value: 0, date: '' };
 
+      const clientPeerRows = sourceRows.filter((row) => (
+        (Number(row.clientIdVisits) || 0) >= 100
+        && (Number(row.clientIdCoverage) || 0) >= .5
+        && (Number(row.uniqueClientIds) || 0) >= 10
+      ));
+      const typicalClientIdVisits = median(clientPeerRows.map((row) => row.clientIdVisits));
+      const representativeThreshold = Math.max(200, typicalClientIdVisits * .15);
+      const representativeRows = sourceRows.filter((row) => (
+        (Number(row.clientIdVisits) || 0) >= representativeThreshold
+        && (Number(row.clientIdCoverage) || 0) >= .5
+        && (Number(row.uniqueClientIds) || 0) >= 10
+      ));
+
       summaries.set(source, {
         hasClientIds: clientIdVisits > 0,
         periodCoverage: techVisits ? Math.min(1, clientIdVisits / techVisits) : 0,
         lowCoverageDays: coverageRows.filter((row) => row.value < .65).length,
         minCoverage,
         maxUnique: maxBy(sourceRows, (row) => row.uniqueClientIds),
-        maxVisitsPerClientId: maxBy(sourceRows, (row) => row.visitsPerClientId),
-        maxTop1: maxBy(sourceRows, (row) => row.topClientId?.share),
-        maxTop10: maxBy(sourceRows, (row) => row.top10ClientShare)
+        representativeDays: representativeRows.length,
+        representativeThreshold,
+        maxVisitsPerClientId: maxBy(representativeRows, (row) => row.visitsPerClientId),
+        maxTop1: maxBy(representativeRows, (row) => row.topClientId?.share),
+        maxTop10: maxBy(representativeRows, (row) => row.top10ClientShare)
       });
     }
     return summaries;
   };
+
+  const representativeMetric = (label, metric, formatter) => metric.date
+    ? `<p><b>${label}:</b> ${formatter(metric.value)} — ${formatDate(metric.date)}<br><small>Выборка: ${formatInt(metric.sampleVisits)} визитов с ClientID</small></p>`
+    : `<p><b>${label}:</b> недостаточно репрезентативных дневных данных</p>`;
 
   const patchClientIdBlocks = (rows) => {
     const summaries = summarizeClientIds(rows);
@@ -143,10 +176,12 @@
         <p><b>Минимальное дневное покрытие:</b> ${formatPct(summary.minCoverage.value)} — ${formatDate(summary.minCoverage.date)}</p>
         <p>Высокое покрытие повышает надёжность оценки и не является фрод-сигналом. Низкое покрытие снижает уверенность.</p>
         <p><b>Дневные максимумы</b></p>
-        <p><b>Максимум уникальных:</b> ${formatInt(summary.maxUnique.value)} — ${formatDate(summary.maxUnique.date)}</p>
-        <p><b>Максимум визитов на ClientID:</b> ${formatDecimal(summary.maxVisitsPerClientId.value)} — ${formatDate(summary.maxVisitsPerClientId.date)}</p>
-        <p><b>Максимальная доля топ-1:</b> ${formatPct(summary.maxTop1.value)} — ${formatDate(summary.maxTop1.date)}</p>
-        <p><b>Максимальная доля топ-10:</b> ${formatPct(summary.maxTop10.value)} — ${formatDate(summary.maxTop10.date)}</p>
+        <p><b>Максимум уникальных:</b> ${formatInt(summary.maxUnique.value)} — ${formatDate(summary.maxUnique.date)}<br><small>Этот показатель отражает масштаб дня и рассчитывается по всем дням.</small></p>
+        <p><b>Репрезентативных дней:</b> ${formatInt(summary.representativeDays)}</p>
+        <p><small>Для концентраций учитываются дни с покрытием ClientID от 50%, минимум 10 уникальными ClientID и не менее ${formatInt(summary.representativeThreshold)} визитов с ClientID.</small></p>
+        ${representativeMetric('Максимум визитов на ClientID', summary.maxVisitsPerClientId, formatDecimal)}
+        ${representativeMetric('Максимальная доля топ-1', summary.maxTop1, formatPct)}
+        ${representativeMetric('Максимальная доля топ-10', summary.maxTop10, formatPct)}
         <p>Максимумы могут относиться к разным датам.</p>`;
     }
   };
