@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v6
       - name: Check JavaScript syntax
         run: node --check assets/app-v2.js
-      - name: Check required files
+      - name: Check required files and analysis logic
         run: |
           test -f index.html
           test -f assets/styles.css
@@ -25,4 +25,9 @@ jobs:
           grep -q "assets/daily.css" index.html
           grep -q "assets/app-v2.js" index.html
           grep -q "monthly-table" index.html
-          grep -q "daily-table" index.html
+          ! grep -q "Все дневные срезы" index.html
+          ! grep -q "class=\"daily-table\"" index.html
+          ! grep -q "class=\"daily-detail\"" assets/app-v2.js
+          grep -q "function scoreDailyDays" assets/app-v2.js
+          grep -q "const days = scoreDailyDays(source)" assets/app-v2.js
+          grep -q "state.dailyResults = state.results.flatMap" assets/app-v2.js
