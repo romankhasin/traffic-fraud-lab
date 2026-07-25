@@ -51,6 +51,16 @@ jobs:
           test ! -f scripts/apply_scoring_stage1.py
           test ! -f .github/workflows/apply-scoring-stage1.yml
 
+      - name: Check ClientID coverage presentation
+        run: |
+          grep -q "summarizeClientIds" assets/api-mode.js
+          grep -q "Дней с покрытием ниже 65%" assets/api-mode.js
+          grep -q "Минимальное дневное покрытие" assets/api-mode.js
+          grep -q "Высокое покрытие повышает надёжность оценки и не является фрод-сигналом" assets/api-mode.js
+          grep -q "Максимумы могут относиться к разным датам" assets/api-mode.js
+          grep -q "lowCoverageDays !== 1" scripts/validate_api_runtime.js
+          grep -q "minCoverage.date !== '2026-07-02'" scripts/validate_api_runtime.js
+
       - name: Check API controls and campaign filter
         run: |
           test -f assets/api.css
