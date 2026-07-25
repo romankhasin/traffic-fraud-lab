@@ -18,7 +18,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Apply Metrica API mode
-        run: python scripts/apply_api_mode.py
+        run: |
+          python scripts/apply_api_mode.py
+          python scripts/patch_api_daily_labels.py
 
       - name: Check JavaScript syntax
         run: |
@@ -40,6 +42,8 @@ jobs:
           grep -q "analyzeApiRows" assets/app-v2.js
           grep -q "precomputedSnapshot" assets/app-v2.js
           grep -q "concentrationScope !== 'daily'" assets/app-v2.js
+          grep -q "ClientID — дневные максимумы" assets/app-v2.js
+          grep -q "Макс. уникальных за день" assets/app-v2.js
           grep -q "raw.githubusercontent.com/romankhasin/-level-group-dashboard/main/data/fraud" assets/api-mode.js
           grep -q "Logs API без лимита строк" index.html
           grep -q "Что умеет версия 0.6" README.md
@@ -60,6 +64,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add assets/app-v2.js index.html README.md
           if ! git diff --cached --quiet; then
-            git commit -m "Add direct Metrica API analysis mode"
+            git commit -m "Clarify daily API concentration metrics"
             git push origin HEAD:${{ github.event.pull_request.head.ref }}
           fi
