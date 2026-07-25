@@ -86,6 +86,12 @@
     }));
   }
 
+  function sourcePeriodTime(card) {
+    const row = $$('#source-table tr').find((candidate) => candidate.querySelector('a')?.getAttribute('href') === `#${card.id}`);
+    const cells = row ? [...row.querySelectorAll('td')] : [];
+    return text(cells[5]);
+  }
+
   function anomalyRows(card) {
     return [...card.querySelectorAll('.daily-detail tbody tr')].map((row) => {
       const cells = [...row.querySelectorAll('td')].map((cell) => text(cell));
@@ -98,6 +104,7 @@
     const risk = text(card.querySelector('.source-score span'));
     const score = text(card.querySelector('.source-score strong'));
     const metrics = metricItems(card);
+    metrics.splice(Math.max(0, metrics.length - 1), 0, { value: sourcePeriodTime(card), label: 'среднее время' });
     const reasons = [...card.querySelectorAll('.flag-list li')].map((item) => text(item)).slice(0, 5);
     const recommendation = text(card.querySelector('.detail--action p'));
     const anomalies = anomalyRows(card);
