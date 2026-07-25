@@ -1,0 +1,49 @@
+name: Hide daily views
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Apply interface patch
+        run: python scripts/hide_daily_views.py
+      - name: Verify visible daily views are removed
+        run: |
+          ! grep -q "Все дневные срезы" index.html
+          ! grep -q "class=\"daily-detail\"" assets/app-v2.js
+          ! grep -q "const dailyRows = row.anomalousDays.length" assets/app-v2.js
+      - name: Verify internal daily analysis remains
+        run: |
+          grep -q "function scoreDailyDays" assets/app-v2.js
+          grep -q "const days = scoreDailyDays(source)" assets/app-v2.js
+          grep -q "state.dailyResults = state.results.flatMap" assets/app-v2.js
+          grep -q "Визиты в аномальные дни" index.html
+      - name: Check JavaScript syntax
+        run: node --check assets/app-v2.js
+      - name: Commit patched files
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html assets/app-v2.js
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Hide visual daily slices"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Comment result
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment ${{ github.event.pull_request.number }} --body "Дневные таблицы скрыты из интерфейса. Внутренний дневной анализ, общий score источника, помесячная оценка и агрегаты сохранены. JavaScript проверен."
