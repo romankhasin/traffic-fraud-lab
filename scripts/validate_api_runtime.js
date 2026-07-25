@@ -92,7 +92,9 @@ for (const source of sources) {
         comment: anomaly ? '1 500 визитов требуют внимания.' : 'Выраженных сочетаний признаков не найдено.',
         reasons: anomaly ? [{ code: 'repeated_clientid', label: 'повторные визиты одного ClientID', visits: 1500, shareOfSuspicious: 1 }] : [],
       },
-      automation: false,
+      automationVisits: source === 'stable_source' && day === 1 ? 1 : 0,
+      automationShare: source === 'stable_source' && day === 1 ? 1 / visits : 0,
+      automation: source === 'stable_source' && day === 1,
       concentrationScope: 'daily',
       dataSource: 'yandex-metrica-logs-api',
     });
