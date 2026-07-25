@@ -5,8 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   validate:
@@ -14,34 +13,39 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-      - name: Apply two-sided behavior update
-        run: python scripts/apply_two_sided_behavior.py
       - name: Check JavaScript syntax
         run: node --check assets/app-v2.js
-      - name: Check two-sided behavior logic
+      - name: Check required files and analysis logic
         run: |
+          test -f index.html
+          test -f assets/styles.css
+          test -f assets/daily.css
+          test -f assets/app-v2.js
+          test ! -f assets/pdf.css
+          test ! -f assets/pdf-export.js
+          grep -q "assets/styles.css" index.html
+          grep -q "assets/daily.css" index.html
+          grep -q "assets/app-v2.js" index.html
+          grep -q "monthly-table" index.html
+          ! grep -q "Все дневные срезы" index.html
+          ! grep -q "class=\"daily-table\"" index.html
+          grep -q "class=\"daily-detail\"" assets/app-v2.js
+          grep -q "const dailyRows = row.anomalousDays.length" assets/app-v2.js
+          grep -q "function scoreDailyDays" assets/app-v2.js
+          grep -q "const days = scoreDailyDays(source)" assets/app-v2.js
+          grep -q "state.dailyResults = state.results.flatMap" assets/app-v2.js
+          grep -q "enoughTimeHistory" assets/app-v2.js
+          grep -q "timeSample.length >= 6" assets/app-v2.js
+          grep -q "timeRatio <= .45" assets/app-v2.js
+          grep -q "timeZ >= 3.5" assets/app-v2.js
           grep -q "bounceDrop >= .2" assets/app-v2.js
-          grep -q "bounceZ >= 3.5" assets/app-v2.js
           grep -q "подозрительно низкие отказы" assets/app-v2.js
           grep -q "day.metrics.time >= 600" assets/app-v2.js
           grep -q "timeRatio >= 3" assets/app-v2.js
           grep -q "подозрительно высокое среднее время" assets/app-v2.js
           ! grep -q "аномально низкий отказ за период" assets/app-v2.js
-      - name: Check PDF removal from interface
-        run: |
           ! grep -q "pdf-export-button" index.html
           ! grep -q "assets/pdf.css" index.html
           ! grep -q "assets/pdf-export.js" index.html
           ! grep -q "html2canvas" index.html
           ! grep -q "jspdf" index.html
-      - name: Commit application changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html assets/app-v2.js README.md
-          if ! git diff --cached --quiet; then
-            git commit -m "Detect two-sided behavior anomalies and remove PDF export"
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          fi
