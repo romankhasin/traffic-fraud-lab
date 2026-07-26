@@ -36,6 +36,12 @@ jobs:
           grep -q "Пересечения технических признаков" assets/api-mode.js
           grep -q "Cookie methodology v4" assets/api.css
 
+      - name: Restore temporary migration files
+        run: |
+          git checkout HEAD -- .github/workflows/apply-cookie-ui-v4.yml
+          git checkout HEAD -- scripts/apply_cookie_ui_v4.py
+          git checkout HEAD -- scripts/.cookie-ui-v4-trigger
+
       - name: Commit final files to PR branch
         run: |
           git config user.name "github-actions[bot]"
