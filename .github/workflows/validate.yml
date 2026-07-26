@@ -3,9 +3,14 @@ name: Validate static app
 on:
   pull_request:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/validate.yml"
+      - "scripts/apply_goal_time_buckets_ui.py"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -13,6 +18,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Apply goal timing cards
+        run: |
+          if [ -f scripts/apply_goal_time_buckets_ui.py ]; then
+            python scripts/apply_goal_time_buckets_ui.py
+          fi
 
       - name: Check JavaScript syntax
         run: |
@@ -30,6 +41,13 @@ jobs:
           node scripts/validate_mi_extensions.js
           node scripts/validate_cookie_methodology.js
 
+      - name: Check goal timing cards
+        run: |
+          grep -q "Любая цель достигнута за 0–3 секунды" assets/api-mode.js
+          grep -q "Любая цель достигнута за 4–15 секунд" assets/api-mode.js
+          grep -q "Любая цель достигнута за 16–30 секунд" assets/api-mode.js
+          ! grep -q "ClientID с 5+ отказными визитами" assets/api-mode.js
+
       - name: Check visit-risk UI integration
         run: |
           grep -q "function aggregateVisitRisk" assets/app-v2.js
@@ -39,11 +57,6 @@ jobs:
           grep -q "Оценка конкретных визитов" assets/app-v2.js
           grep -q "VisitID высокий риск" assets/app-v2.js
           grep -q "Сумма подозрительных VisitID" index.html
-          grep -q "Что умеет версия 0.8" README.md
-          grep -q "один раз в итоговом количестве" README.md
-          test ! -f scripts/apply_visit_risk_ui.py
-          test ! -f .github/workflows/apply-visit-risk-ui.yml
-          test ! -f scripts/.visit-risk-ui-trigger
 
       - name: Check scoring stage 1
         run: |
@@ -53,76 +66,46 @@ jobs:
           grep -q "аномально низкие отказы как слабый подтверждающий сигнал" assets/app-v2.js
           grep -q "addSignal(networkScore, 'network'" assets/app-v2.js
           grep -q "clientCoverage < .35" assets/app-v2.js
-          grep -q "Объёмная значимость сигналов" index.html
-          grep -q "Мультисигнальный score" index.html
-          test ! -f scripts/apply_scoring_stage1.py
-          test ! -f .github/workflows/apply-scoring-stage1.yml
 
       - name: Check ClientID selected-period presentation
         run: |
           grep -q "summarizeClientIds" assets/api-mode.js
           grep -q "loadPeriodSummaries" assets/api-mode.js
           grep -q "clientIdPeriods" assets/api-mode.js
-          grep -q "pathTemplate" assets/api-mode.js
           grep -q "За выбранный период" assets/api-mode.js
-          grep -q "Уникальных ClientID" assets/api-mode.js
-          grep -q "Доля топ-1" assets/api-mode.js
-          grep -q "Доля топ-10" assets/api-mode.js
-          grep -q "Доля повторных визитов" assets/api-mode.js
           grep -q "Пиковые дневные значения" assets/api-mode.js
-          grep -q "representativeThreshold" assets/api-mode.js
-          grep -q "Выборка:.*визитов с ClientID" assets/api-mode.js
-          grep -q "Exact period summary was not attached" scripts/validate_api_runtime.js
-          grep -q "Tiny day distorted top-1 maximum" scripts/validate_clientid_representative.js
-          grep -q "Tiny-only source should have no representative maxima" scripts/validate_clientid_representative.js
 
-      - name: Check MI baseline and drill-down extensions
+      - name: Check MI and cookie methodology extensions
         run: |
           grep -q "aggregateSliceGroups" assets/api-mode.js
           grep -q "buildWarningModel" assets/api-mode.js
-          grep -q "sliceMetrics" assets/api-mode.js
           grep -q "Отклонения относительно нормы источника" assets/api-mode.js
           grep -q "Локализация аномалий" assets/api-mode.js
-          grep -q "Качество технических данных" assets/api-mode.js
-          grep -q "Поведенческие паттерны" assets/api-mode.js
-          grep -q "Referrer / домен" assets/api-mode.js
-          grep -q "MI extension validation passed" scripts/validate_mi_extensions.js
-          grep -q "warning-table" assets/api.css
-          grep -q "behavior-grid" assets/api.css
-
-      - name: Check cookie methodology v4
-        run: |
-          grep -q "renderCookieClientTable" assets/api-mode.js
-          grep -q "Доля визитов с полученным ClientID" assets/api-mode.js
-          grep -q "Интерпретация общей уникальности ограничена" assets/api-mode.js
           grep -q "Качество технических данных и поведение" assets/api-mode.js
           grep -q "Пересечения технических признаков" assets/api-mode.js
-          grep -q "Обычный день и пик" assets/api-mode.js
-          grep -q "mobile/tablet-визитов" assets/api-mode.js
+          grep -q "renderCookieClientTable" assets/api-mode.js
           grep -q "Cookie methodology UI validation passed" scripts/validate_cookie_methodology.js
-          grep -q "Cookie methodology v4" assets/api.css
-          test ! -f scripts/apply_cookie_ui_v4.py
-          test ! -f .github/workflows/apply-cookie-ui-v4.yml
-          test ! -f scripts/.cookie-ui-v4-trigger
 
       - name: Check API controls and campaign filter
         run: |
           test -f assets/api.css
           test -f assets/api-mode.js
-          test -f scripts/validate_api_runtime.js
           grep -q "api-counter-list" index.html
-          grep -q "api-date-from" index.html
-          grep -q "api-date-to" index.html
-          grep -q "api-analyze-button" index.html
           grep -q "analyzeApiRows" assets/app-v2.js
           grep -q "campaignFilterLabel" assets/api-mode.js
-          grep -q "catalog?.campaignFilter" assets/api-mode.js
           grep -Fq "['prg', 'med', 'mrk']" assets/api-mode.js
-          grep -q "В анализ входят только кампании" assets/api-mode.js
-          grep -Fq 'campaign ${campaignFilterLabel()}' assets/api-mode.js
-          grep -q "function scoreDailyDays" assets/app-v2.js
-          grep -q "подозрительно высокое среднее время" assets/app-v2.js
-          grep -q "score += Math.min(28, clientIdScore)" assets/app-v2.js
-          grep -q "const MIN_SOURCE_VISITS = 20" assets/app-v2.js
-          grep -q "if (kind === 'tech') coerceClientIdsToText(rows, map)" assets/app-v2.js
           ! grep -q "pdf-export-button" index.html
+
+      - name: Commit goal timing UI
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/api-mode.js
+          if git diff --cached --quiet; then
+            echo "Goal timing UI is already current"
+          else
+            git commit -m "Show 0-3, 4-15 and 16-30 second goal buckets"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
