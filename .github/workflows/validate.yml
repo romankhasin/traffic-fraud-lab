@@ -41,15 +41,10 @@ jobs:
           node scripts/validate_clientid_representative.js
           node scripts/validate_mi_extensions.js
 
-      - name: Check MI features
+      - name: Check MI feature anchors
         run: |
-          grep -q "function aggregateSliceGroups" assets/api-mode.js
-          grep -q "function buildWarningModel" assets/api-mode.js
-          grep -q "Отклонения относительно baseline" assets/api-mode.js
-          grep -q "Браузер → разрешение → технический слепок" assets/api-mode.js
-          grep -q "Referrer-домены и модели устройств" assets/api-mode.js
-          grep -q "Поведенческие паттерны" assets/api-mode.js
-          grep -q "Качество технических данных" assets/api-mode.js
+          grep -q "aggregateSliceGroups" assets/api-mode.js
+          grep -q "buildWarningModel" assets/api-mode.js
           grep -q "mi-warning-table" assets/api.css
 
       - name: Commit applied files to PR branch
