@@ -1,0 +1,52 @@
+name: Apply anomaly colors
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Apply visual migration
+        run: python scripts/apply_anomaly_colors.py
+
+      - name: Validate JavaScript and styles
+        run: |
+          node --check assets/api-mode.js
+          node scripts/validate_api_runtime.js
+          node scripts/validate_mi_extensions.js
+          grep -q "metric-section-heading--period" assets/api-mode.js
+          grep -q "metric-section-heading--peak" assets/api-mode.js
+          grep -q "anomaly-value" assets/api-mode.js
+          grep -q "Bronze section headings and burgundy anomalies" assets/api.css
+
+      - name: Restore temporary migration files
+        run: |
+          git checkout HEAD -- .github/workflows/apply-anomaly-colors.yml
+          git checkout HEAD -- scripts/apply_anomaly_colors.py
+
+      - name: Commit final files to PR branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/api-mode.js assets/api.css
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Highlight metric sections and anomalies"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
