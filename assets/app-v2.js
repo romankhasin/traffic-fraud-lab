@@ -601,6 +601,7 @@
   function scorePeriodSource(source, base) {
     const data = snapshot(source);
     const reasons = [];
+    const breakdown = [];
     const families = new Set();
     let score = 0;
     const m = data.metrics;
@@ -608,7 +609,7 @@
       if (!points) return;
       score += points;
       families.add(family);
-      if (reason) reasons.push(reason);
+      if (reason) { reasons.push(reason); breakdown.push({ points, family, reason, scope: 'period' }); }
     };
 
     if (m.bounce >= .78 || m.bounce - base.bounce >= .28) addSignal(24, 'behavior', 'сильно повышенный отказ за период');
@@ -657,6 +658,7 @@
       score += Math.min(28, clientIdScore);
       families.add('identity');
       reasons.push(...clientReasons);
+      breakdown.push({ points: Math.min(28, clientIdScore), family: 'identity', reason: clientReasons.join(' · '), scope: 'period' });
     }
 
     if (data.visits < 100) score = Math.min(score, 24);
@@ -666,6 +668,7 @@
       ...data,
       score: Math.min(100, Math.round(score)),
       reasons,
+      breakdown,
       families: [...families],
       massAutomation: automation.massive
     };
@@ -702,6 +705,7 @@
       };
 
       const reasons = [];
+      const breakdown = [];
       const families = new Set();
       let score = 0;
       let massAutomation = false;
@@ -709,7 +713,7 @@
         if (!points) return;
         score += points;
         families.add(family);
-        if (reason) reasons.push(reason);
+        if (reason) { reasons.push(reason); breakdown.push({ points, family, reason, scope: 'day', date: day.date }); }
       };
       const enoughDays = others.length >= 4;
       const minimumVisits = Math.max(50, baseline.visits * .12);
@@ -802,6 +806,7 @@
           score += Math.min(28, clientIdScore);
           families.add('identity');
           reasons.push(...clientReasons);
+          breakdown.push({ points: Math.min(28, clientIdScore), family: 'identity', reason: clientReasons.join(' · '), scope: 'day', date: day.date });
         }
 
         const automation = automationSignal(day);
@@ -830,6 +835,7 @@
         risk,
         confidence,
         reasons: [...new Set(reasons)],
+        breakdown,
         families: [...families],
         massAutomation,
         flaggedVisits: risk === 'low'
@@ -848,8 +854,10 @@
     const days = scoreDailyDays(source);
     const anomalousDays = days.filter((day) => day.risk !== 'low').sort((a, b) => b.score - a.score || b.visits - a.visits);
     const maxDaily = anomalousDays[0]?.score || 0;
+    const dominant = period.score >= maxDaily ? period : anomalousDays[0];
     let score = Math.max(period.score, maxDaily);
-    if (anomalousDays.length >= 2) score = Math.min(100, score + Math.min(10, anomalousDays.length * 2));
+    const anomalyBonus = anomalousDays.length >= 2 ? Math.min(10, anomalousDays.length * 2) : 0;
+    if (anomalyBonus) score = Math.min(100, score + anomalyBonus);
     const families = new Set(period.families || []);
     for (const day of days) {
       if (day.score <= 0) continue;
@@ -858,6 +866,10 @@
     const massAutomation = Boolean(period.massAutomation || days.some((day) => day.massAutomation));
     score = Math.round(capScoreByFamilies(score, families, { massAutomation }));
     const risk = score >= 60 ? 'high' : score >= 35 ? 'medium' : 'low';
+    const scoreBreakdown = [...(dominant?.breakdown || [])];
+    if (anomalyBonus) scoreBreakdown.push({ points: anomalyBonus, family: 'stability', reason: `${anomalousDays.length} аномальных дня/дней за период`, scope: 'period' });
+    const rawBreakdownTotal = scoreBreakdown.reduce((sum, item) => sum + (Number(item.points) || 0), 0);
+    if (rawBreakdownTotal !== score) scoreBreakdown.push({ points: score - rawBreakdownTotal, family: 'limit', reason: 'корректировка итогового score правилами объёма и числа независимых семейств сигналов', scope: 'system' });
     const reasons = [...period.reasons];
     if (anomalousDays.length) reasons.unshift(`${anomalousDays.length} ${plural(anomalousDays.length, 'аномальный день', 'аномальных дня', 'аномальных дней')}; максимум ${anomalousDays[0].score}/100`);
     let confidence = 'Высокая';
@@ -876,6 +888,8 @@
       risk,
       confidence,
       reasons: [...new Set(reasons)],
+      scoreBreakdown,
+      scoreBasis: dominant === period ? 'период' : `день ${dominant?.date || '—'}`,
       families: [...families],
       massAutomation,
       action,
@@ -941,7 +955,7 @@
       .map((reason) => ({ ...reason, shareOfSuspicious: suspiciousVisits ? reason.visits / suspiciousVisits : 0 }));
     const topReasons = reasons.slice(0, 2).map((reason) => reason.label);
     const comment = suspiciousVisits
-      ? `${formatInt(suspiciousVisits)} визитов требуют внимания: ${formatInt(highRiskVisits)} высокого риска и ${formatInt(reviewVisits)} требуют проверки. Основные причины — ${topReasons.join(' и ') || 'совпадение нескольких независимых признаков'}.`
+      ? `${formatInt(suspiciousVisits)} визитов получили сочетание признаков: ${formatInt(highRiskVisits)} отнесены к высокому риску, ещё ${formatInt(reviewVisits)} требуют проверки. Наибольший вклад дали ${topReasons.join(' и ') || 'несколько независимых технических и поведенческих факторов'}. Это означает, что отклонения сосредоточены не во всём трафике источника, а в конкретной части визитов. Практический вывод — сначала локализовать даты, домены и технические кластеры, затем подтверждать причину в Метрике и данных площадки.`
       : 'Выраженных сочетаний признаков на уровне отдельных визитов не найдено.';
 
     return {
@@ -1195,6 +1209,42 @@
     ui.list.innerHTML = state.results.map((row, index) => renderSourceCard(row, index)).join('');
   }
 
+  const FAMILY_LABELS = {
+    volume: 'Объём трафика',
+    behavior: 'Поведение',
+    quality: 'Качество и конверсии',
+    network: 'IP и подсети',
+    identity: 'ClientID',
+    technical: 'Технический профиль',
+    stability: 'Повторяемость аномалий',
+    limit: 'Системная корректировка'
+  };
+
+  function analystExplanation(reason, context = {}) {
+    const value = String(reason || '').trim();
+    const lower = value.toLowerCase();
+    const conclusion = 'Сам по себе признак не доказывает фрод; вывод делается только вместе с независимыми техническими и поведенческими сигналами.';
+    if (lower.includes('отказ')) return `${value}. Это означает, что доля визитов без содержательного взаимодействия заметно вышла за собственную норму источника. Возможные причины: изменение качества инвентаря, некорректная посадочная страница, автоматические переходы или случайный трафик. Следствие: вероятность нецелевого либо автоматизированного потока повышается. ${conclusion}`;
+    if (lower.includes('время')) return `${value}. Длительность визита существенно отличается от типичного дня площадки. Резкое падение часто связано с быстрым закрытием страницы или автоматическим открытием, а чрезмерный рост — с зависшими вкладками, фоновыми webview либо искусственным удержанием сессии. Следствие: поведенческий профиль дня нельзя считать обычным. ${conclusion}`;
+    if (lower.includes('clientid')) return `${value}. Небольшое число идентификаторов формирует непропорционально большой объём визитов или повторов. Это может возникать из-за реальных возвратов, служебного трафика, общей инфраструктуры или автоматизации. Следствие: требуется проверить устойчивость ClientID, cookies и совпадение с IP/техническими кластерами. ${conclusion}`;
+    if (lower.includes('ip') || lower.includes('подсет')) return `${value}. Значительная часть дневного трафика сосредоточена в одном сетевом адресе или диапазоне. Для массовой рекламной аудитории такая концентрация нетипична, но возможна у корпоративных сетей, операторских NAT и прокси. Следствие: сигнал становится сильным только при совпадении с плохим поведением, повторными ClientID или однородным техническим профилем. ${conclusion}`;
+    if (lower.includes('техпроф') || lower.includes('браузер') || lower.includes('автоматизац')) return `${value}. Большая группа визитов имеет одинаковую либо технически необычную конфигурацию браузера, ОС, устройства и разрешения. Это может быть особенностью приложения или рекламного формата, но также характерно для эмуляторов и автоматизированных сред. Следствие: необходимо локализовать кластер по дням, referrer и поведению. ${conclusion}`;
+    if (lower.includes('конверс')) return `${value}. Конверсионное поведение заметно отличается от обычного уровня источника. Почти полное отсутствие качественных действий указывает на слабую ценность трафика; неестественно высокая конверсия может означать ошибку передачи цели или автоматические действия. Следствие: проверить цели, коллтрекинг и состав трафика в отмеченные даты. ${conclusion}`;
+    if (lower.includes('нов')) return `${value}. Почти каждый визит определяется как новый пользователь, поэтому источник практически не формирует возвращающуюся аудиторию. Возможные причины: реальный приток новой аудитории, нестабильные идентификаторы, приватные сессии или очистка хранилища. Следствие: метрики ClientID и повторов нужно интерпретировать осторожно. ${conclusion}`;
+    if (lower.includes('объём') || lower.includes('всплеск')) return `${value}. Объём трафика резко вырос относительно обычного дня этой же площадки. Сам рост может быть результатом увеличения бюджета или нового размещения, но он повышает значимость остальных отклонений: если вместе с объёмом ухудшаются поведение и техническая структура, риск становится существенно выше. ${conclusion}`;
+    return `${value}. Алгоритм зафиксировал отклонение от собственной нормы источника. Причину необходимо уточнить по дате, кампании, referrer и связанным техническим срезам. ${conclusion}`;
+  }
+
+  function renderScoreBreakdown(row) {
+    const items = (row.scoreBreakdown || []).filter((item) => Number(item.points));
+    if (!items.length) return '<p>Баллы не начислены: выраженных отклонений с достаточной выборкой не найдено.</p>';
+    const body = items.map((item) => {
+      const points = Number(item.points) || 0;
+      return `<tr><td><b>${escapeHtml(FAMILY_LABELS[item.family] || item.family || 'Сигнал')}</b><br><small>${escapeHtml(item.reason || '—')}</small></td><td class="score-points ${points < 0 ? 'negative' : ''}">${points >= 0 ? '+' : '−'}${Math.abs(points)}</td><td>${escapeHtml(analystExplanation(item.reason, row))}</td></tr>`;
+    }).join('');
+    return `<p><b>Основа итоговой оценки:</b> ${escapeHtml(row.scoreBasis || '—')}. Баллы ниже отражают фактические правила движка; отрицательная корректировка означает ограничение score из-за объёма выборки или недостаточного числа независимых семейств сигналов.</p><div class="table-wrap"><table class="mini-table score-breakdown-table"><thead><tr><th>Сигнал</th><th>Баллы</th><th>Причина → следствие → вывод</th></tr></thead><tbody>${body}</tbody><tfoot><tr><th>Итоговый score</th><th>${formatInt(row.score)}</th><th>${escapeHtml(row.action)}</th></tr></tfoot></table></div>`;
+  }
+
   function renderSourceCard(row, index) {
     const reasons = row.reasons.length ? row.reasons : ['критичных сочетаний признаков не найдено'];
     const dailyRows = row.anomalousDays.length
@@ -1226,7 +1276,7 @@
         </div>
         <section class="daily-detail"><h4>Конкретные аномальные даты</h4><div class="table-wrap mini-table-wrap"><table class="mini-table"><thead><tr><th>Дата</th><th>Визиты</th><th>Подозр.</th><th>Отказы</th><th>Время</th><th>ClientID: уник. / топ-1</th><th>Score</th><th>Причины</th></tr></thead><tbody>${dailyRows}</tbody></table></div></section>
         <div class="detail-grid">
-          <section class="detail"><h4>Почему такой score</h4><ul class="flag-list">${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul></section>
+          <section class="detail detail--wide"><h4>Как сформирован score</h4>${renderScoreBreakdown(row)}</section>
           <section class="detail"><h4>${ipTitle}</h4><p><b>Топ IP:</b> ${escapeHtml(maskIp(row.topIp.key))} · ${formatPct(row.topIp.share)}</p><p><b>Топ подсеть:</b> ${escapeHtml(row.topSubnet.key)} · ${formatPct(row.topSubnet.share)}</p></section>
           <section class="detail"><h4>${techTitle}</h4><p><b>Топ браузер:</b> ${escapeHtml(row.topBrowser.key)} · ${formatPct(row.topBrowser.share)}</p><p><b>Топ связка:</b> ${escapeHtml(shorten(row.topProfile.key, 100))} · ${formatPct(row.topProfile.share)}</p></section>
           <section class="detail"><h4>${clientTitle}</h4>${row.clientIdVisits ? `<p><b>Покрытие:</b> ${formatPct(row.clientIdCoverage)}</p><p><b>${uniqueClientLabel}:</b> ${formatInt(row.uniqueClientIds)}</p><p><b>${visitsPerClientLabel}:</b> ${row.visitsPerClientId.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p><p><b>Макс. топ-1 / топ-10:</b> ${formatPct(row.topClientId.share)} / ${formatPct(row.top10ClientShare)}</p>` : '<p>ClientID не найден в выбранных данных.</p>'}</section>
