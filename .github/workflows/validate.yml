@@ -72,6 +72,25 @@ jobs:
           grep -q "Tiny day distorted top-1 maximum" scripts/validate_clientid_representative.js
           grep -q "Tiny-only source should have no representative maxima" scripts/validate_clientid_representative.js
 
+      - name: Check period and dated IP technical blocks
+        run: |
+          grep -q "periodMetrics || counter.clientIdPeriods" assets/api-mode.js
+          grep -q "summarizeConcentrations" assets/api-mode.js
+          grep -q "summarizeConcentrationDailyPeaks" assets/api-mode.js
+          grep -q "renderNetworkBlock" assets/api-mode.js
+          grep -q "renderTechnicalBlock" assets/api-mode.js
+          grep -q "Топ IP" assets/api-mode.js
+          grep -q "Топ подсеть" assets/api-mode.js
+          grep -q "Топ браузер" assets/api-mode.js
+          grep -q "Топ связка" assets/api-mode.js
+          grep -q "Максимальная доля топ-IP" assets/api-mode.js
+          grep -q "Максимальная доля топ-подсети" assets/api-mode.js
+          grep -q "Максимальная доля топ-браузера" assets/api-mode.js
+          grep -q "Максимальная доля топ-связки" assets/api-mode.js
+          grep -q "Даты могут не совпадать" assets/api-mode.js
+          grep -q "Network period and dated peak block was not rendered" scripts/validate_api_runtime.js
+          grep -q "Technical daily peak date was not preserved independently" scripts/validate_api_runtime.js
+
       - name: Check API controls and campaign filter
         run: |
           test -f assets/api.css
