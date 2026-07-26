@@ -109,16 +109,34 @@ for (const source of sources) {
   }
 }
 
-const clientIdSummaries = global.FraudLabApiHelpers.summarizeClientIds(rows);
+const periodSummaries = new Map([
+  ['stable_source', {
+    visits: 9500,
+    clientIdVisits: 9025,
+    coverage: 0.95,
+    uniqueClientIds: 8200,
+    top1Visits: 45,
+    top1Share: 45 / 9025,
+    top10Visits: 310,
+    top10Share: 310 / 9025,
+    visitsPerClientId: 9025 / 8200,
+    repeatClientVisitShare: (9025 - 8200) / 9025,
+    activeDays: 10,
+    representative: true,
+  }],
+]);
+
+const clientIdSummaries = global.FraudLabApiHelpers.summarizeClientIds(rows, periodSummaries);
 const stableClientId = clientIdSummaries.get('stable_source');
-if (!stableClientId || stableClientId.lowCoverageDays !== 1) {
-  throw new Error(`Unexpected low-coverage day count: ${JSON.stringify(stableClientId)}`);
+if (!stableClientId?.period || stableClientId.period.top1Visits !== 45) {
+  throw new Error(`Exact period summary was not attached: ${JSON.stringify(stableClientId)}`);
 }
-if (Math.abs(stableClientId.minCoverage.value - 0.5) > 0.000001 || stableClientId.minCoverage.date !== '2026-07-02') {
-  throw new Error(`Unexpected minimum ClientID coverage: ${JSON.stringify(stableClientId.minCoverage)}`);
+if (stableClientId.daily.representativeDays !== 10 || !stableClientId.daily.maxTop1.date) {
+  throw new Error(`Representative daily peaks are invalid: ${JSON.stringify(stableClientId.daily)}`);
 }
-if (!stableClientId.maxUnique.date || !stableClientId.maxTop1.date || !stableClientId.maxTop10.date) {
-  throw new Error('ClientID maxima dates were not preserved');
+const clientHtml = global.FraudLabApiHelpers.renderClientIdBlock(stableClientId, []);
+if (!clientHtml.includes('За выбранный период') || !clientHtml.includes('Доля топ-1') || !clientHtml.includes('Пиковые дневные значения')) {
+  throw new Error(`Selected-period ClientID block was not rendered: ${clientHtml}`);
 }
 
 const result = global.FraudLab.analyzeApiRows(rows, {
@@ -129,26 +147,11 @@ const result = global.FraudLab.analyzeApiRows(rows, {
 if (result.sources !== 2 || result.days !== 20) {
   throw new Error(`Unexpected analysis size: ${JSON.stringify(result)}`);
 }
-if (getElement('#results').hidden) {
-  throw new Error('Results remained hidden');
-}
-if (!getElement('#kpi-grid').innerHTML.includes('Logs API')) {
-  throw new Error('API KPI was not rendered');
-}
-if (!getElement('#source-list').innerHTML.includes('ClientID — дневные максимумы')) {
-  throw new Error('Daily concentration labels were not rendered');
-}
-if (!getElement('#source-list').innerHTML.includes('Оценка конкретных визитов')) {
-  throw new Error('Visit-level risk summary was not rendered');
-}
-if (!getElement('#source-list').innerHTML.includes('повторные визиты одного ClientID')) {
-  throw new Error('Visit-level reason was not rendered');
-}
-if (!getElement('#kpi-grid').innerHTML.includes('Подозрительные визиты')) {
-  throw new Error('Refined suspicious visits KPI was not rendered');
-}
-if (!getElement('#summary-text').textContent.includes('Runtime test')) {
-  throw new Error('API context was not rendered');
-}
+if (getElement('#results').hidden) throw new Error('Results remained hidden');
+if (!getElement('#kpi-grid').innerHTML.includes('Logs API')) throw new Error('API KPI was not rendered');
+if (!getElement('#source-list').innerHTML.includes('Оценка конкретных визитов')) throw new Error('Visit-level risk summary was not rendered');
+if (!getElement('#source-list').innerHTML.includes('повторные визиты одного ClientID')) throw new Error('Visit-level reason was not rendered');
+if (!getElement('#kpi-grid').innerHTML.includes('Подозрительные визиты')) throw new Error('Refined suspicious visits KPI was not rendered');
+if (!getElement('#summary-text').textContent.includes('Runtime test')) throw new Error('API context was not rendered');
 
 console.log(`Fraud API runtime validation passed: ${result.sources} sources, ${result.days} days`);
