@@ -756,9 +756,9 @@
       <h4>Поведенческие паттерны</h4>
       <p><small>Паттерны помогают расставить приоритеты для ручной проверки. Быстрая цель или повторный отказ не являются доказательством сами по себе.</small></p>
       <div class="behavior-grid">
-        ${behaviorItem('ClientID с 5+ отказными визитами', period.repeatBounceClients5, period.repeatBounceClientShare, 'Повторяющийся отказной сценарий одного браузера.')}
-        ${behaviorItem('Любая цель достигнута ≤15 секунд', period.fastAnyGoal15Visits, period.fastAnyGoal15Share, 'Проверить автоматические клики и служебные цели.')}
-        ${behaviorItem('Любая цель достигнута за 15–30 секунд', period.fastAnyGoal30Visits, period.fastAnyGoal30Share, 'Погранично быстрые достижения целей.')}
+        ${behaviorItem('Любая цель достигнута за 0–3 секунды', period.fastAnyGoal3Visits, period.fastAnyGoal3Share, 'Крайне быстрое достижение: проверить автоклики, служебные цели и события, срабатывающие при загрузке.')}
+        ${behaviorItem('Любая цель достигнута за 4–15 секунд', period.fastAnyGoal15Visits, period.fastAnyGoal15Share, 'Быстрое достижение: проверить реалистичность пользовательского сценария и тип цели.')}
+        ${behaviorItem('Любая цель достигнута за 16–30 секунд', period.fastAnyGoal30Visits, period.fastAnyGoal30Share, 'Погранично быстрый сценарий: сопоставить с типом цели и посадочной страницей.')}
         ${behaviorItem('Качественный звонок достигнут ≤15 секунд', period.fastQualityGoal15Visits, period.fastQualityGoal15Share, 'Особенно важно проверить корректность передачи офлайн-цели.')}
         ${behaviorItem('Качественный звонок достигнут за 15–30 секунд', period.fastQualityGoal30Visits, period.fastQualityGoal30Share, 'Сопоставить с логикой коллтрекинга и временем импорта.')}
         ${behaviorItem('3+ разных целей в одном визите', period.multiGoalVisits, period.multiGoalShare, 'Может указывать на нажатия по множеству элементов подряд.')}
