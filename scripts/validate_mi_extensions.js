@@ -114,6 +114,8 @@ const period = {
   cookieDisabledShare: 0.035,
   repeatBounceClients5: 42,
   repeatBounceClientShare: 0.006,
+  fastAnyGoal3Visits: 40,
+  fastAnyGoal3Share: 0.004,
   fastAnyGoal15Visits: 120,
   fastAnyGoal15Share: 0.012,
   fastAnyGoal30Visits: 180,
@@ -153,7 +155,10 @@ if (!qualityHtml.includes('Качество технических данных'
   throw new Error(`Technical data quality block is incomplete: ${qualityHtml}`);
 }
 const behaviorHtml = helpers.renderBehaviorBlock(period);
-if (!behaviorHtml.includes('Поведенческие паттерны') || !behaviorHtml.includes('5+ отказными') || !behaviorHtml.includes('≤15 секунд')) {
+if (!behaviorHtml.includes('Поведенческие паттерны')
+    || !behaviorHtml.includes('0–3 секунды')
+    || !behaviorHtml.includes('4–15 секунд')
+    || !behaviorHtml.includes('16–30 секунд')) {
   throw new Error(`Behavior block is incomplete: ${behaviorHtml}`);
 }
 
