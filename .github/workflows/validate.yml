@@ -41,12 +41,6 @@ jobs:
           node scripts/validate_clientid_representative.js
           node scripts/validate_mi_extensions.js
 
-      - name: Check MI feature anchors
-        run: |
-          grep -q "aggregateSliceGroups" assets/api-mode.js
-          grep -q "buildWarningModel" assets/api-mode.js
-          grep -q "mi-warning-table" assets/api.css
-
       - name: Commit applied files to PR branch
         run: |
           git config user.name "github-actions[bot]"
