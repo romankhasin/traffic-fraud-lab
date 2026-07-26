@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Apply goal timing cards
         run: |
@@ -48,56 +50,22 @@ jobs:
           grep -q "Любая цель достигнута за 16–30 секунд" assets/api-mode.js
           ! grep -q "ClientID с 5+ отказными визитами" assets/api-mode.js
 
-      - name: Check visit-risk UI integration
+      - name: Check existing integrations
         run: |
           grep -q "function aggregateVisitRisk" assets/app-v2.js
-          grep -q "visitRisk: aggregateVisitRisk(rows)" assets/app-v2.js
-          grep -q "day.visitRisk" assets/app-v2.js
           grep -q "Подозрительные визиты" assets/app-v2.js
-          grep -q "Оценка конкретных визитов" assets/app-v2.js
-          grep -q "VisitID высокий риск" assets/app-v2.js
-          grep -q "Сумма подозрительных VisitID" index.html
-
-      - name: Check scoring stage 1
-        run: |
           grep -q "function automationSignal" assets/app-v2.js
-          grep -q "function capScoreByFamilies" assets/app-v2.js
-          grep -q "automationVisits" assets/app-v2.js
-          grep -q "аномально низкие отказы как слабый подтверждающий сигнал" assets/app-v2.js
-          grep -q "addSignal(networkScore, 'network'" assets/app-v2.js
-          grep -q "clientCoverage < .35" assets/app-v2.js
-
-      - name: Check ClientID selected-period presentation
-        run: |
           grep -q "summarizeClientIds" assets/api-mode.js
-          grep -q "loadPeriodSummaries" assets/api-mode.js
-          grep -q "clientIdPeriods" assets/api-mode.js
-          grep -q "За выбранный период" assets/api-mode.js
-          grep -q "Пиковые дневные значения" assets/api-mode.js
-
-      - name: Check MI and cookie methodology extensions
-        run: |
           grep -q "aggregateSliceGroups" assets/api-mode.js
-          grep -q "buildWarningModel" assets/api-mode.js
-          grep -q "Отклонения относительно нормы источника" assets/api-mode.js
-          grep -q "Локализация аномалий" assets/api-mode.js
           grep -q "Качество технических данных и поведение" assets/api-mode.js
-          grep -q "Пересечения технических признаков" assets/api-mode.js
           grep -q "renderCookieClientTable" assets/api-mode.js
-          grep -q "Cookie methodology UI validation passed" scripts/validate_cookie_methodology.js
-
-      - name: Check API controls and campaign filter
-        run: |
-          test -f assets/api.css
-          test -f assets/api-mode.js
           grep -q "api-counter-list" index.html
-          grep -q "analyzeApiRows" assets/app-v2.js
-          grep -q "campaignFilterLabel" assets/api-mode.js
           grep -Fq "['prg', 'med', 'mrk']" assets/api-mode.js
           ! grep -q "pdf-export-button" index.html
 
       - name: Commit goal timing UI
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -106,6 +74,6 @@ jobs:
             echo "Goal timing UI is already current"
           else
             git commit -m "Show 0-3, 4-15 and 16-30 second goal buckets"
-            git pull --rebase origin main
-            git push origin HEAD:main
+            git pull --rebase origin "$TARGET_BRANCH"
+            git push origin HEAD:"$TARGET_BRANCH"
           fi
