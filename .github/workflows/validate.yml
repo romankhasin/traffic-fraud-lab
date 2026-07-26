@@ -26,6 +26,7 @@ jobs:
           if [ -f scripts/apply_mi_ui_a.py ]; then python scripts/apply_mi_ui_a.py; fi
           if [ -f scripts/apply_mi_ui_b.py ]; then python scripts/apply_mi_ui_b.py; fi
           if [ -f scripts/apply_mi_ui_c.py ]; then python scripts/apply_mi_ui_c.py; fi
+          rm -f scripts/.mi-ui-trigger
 
       - name: Check JavaScript syntax
         run: |
@@ -45,6 +46,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -- .github/workflows/validate.yml
           git add -A
           if git diff --cached --quiet; then
             echo "No UI migration changes"
