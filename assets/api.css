@@ -512,3 +512,17 @@
 .warning-signal--anomaly em {
   color: #7a1f2b;
 }
+
+
+/* Metric section heading emphasis */
+.metric-section-heading {
+  margin: 14px 0 8px;
+  color: var(--bronze);
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.metric-section-heading b {
+  color: inherit;
+  font-weight: 800;
+}
