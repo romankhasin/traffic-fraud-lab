@@ -1,32 +1,18 @@
-name: Apply and validate MI antifraud UI
+name: Validate static app
 
 on:
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PR branch
+      - name: Checkout
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Apply pending MI migration
-        run: |
-          if [ -f scripts/apply_mi_ui_a.py ]; then python scripts/apply_mi_ui_a.py; fi
-          if [ -f scripts/apply_mi_ui_b.py ]; then python scripts/apply_mi_ui_b.py; fi
-          if [ -f scripts/apply_mi_ui_c.py ]; then python scripts/apply_mi_ui_c.py; fi
-          rm -f scripts/.mi-ui-trigger
 
       - name: Check JavaScript syntax
         run: |
@@ -36,21 +22,90 @@ jobs:
           node --check scripts/validate_clientid_representative.js
           node --check scripts/validate_mi_extensions.js
 
-      - name: Run API runtime tests
+      - name: Run API analysis runtime test
         run: |
           node scripts/validate_api_runtime.js
           node scripts/validate_clientid_representative.js
           node scripts/validate_mi_extensions.js
 
-      - name: Commit applied files to PR branch
+      - name: Check visit-risk UI integration
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -- .github/workflows/validate.yml
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No UI migration changes"
-          else
-            git commit -m "Add MI baseline warnings and drill-down diagnostics"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
+          grep -q "function aggregateVisitRisk" assets/app-v2.js
+          grep -q "visitRisk: aggregateVisitRisk(rows)" assets/app-v2.js
+          grep -q "day.visitRisk" assets/app-v2.js
+          grep -q "Подозрительные визиты" assets/app-v2.js
+          grep -q "Оценка конкретных визитов" assets/app-v2.js
+          grep -q "VisitID высокий риск" assets/app-v2.js
+          grep -q "Сумма подозрительных VisitID" index.html
+          grep -q "Что умеет версия 0.8" README.md
+          grep -q "один раз в итоговом количестве" README.md
+          test ! -f scripts/apply_visit_risk_ui.py
+          test ! -f .github/workflows/apply-visit-risk-ui.yml
+          test ! -f scripts/.visit-risk-ui-trigger
+
+      - name: Check scoring stage 1
+        run: |
+          grep -q "function automationSignal" assets/app-v2.js
+          grep -q "function capScoreByFamilies" assets/app-v2.js
+          grep -q "automationVisits" assets/app-v2.js
+          grep -q "аномально низкие отказы как слабый подтверждающий сигнал" assets/app-v2.js
+          grep -q "addSignal(networkScore, 'network'" assets/app-v2.js
+          grep -q "clientCoverage < .35" assets/app-v2.js
+          grep -q "Объёмная значимость сигналов" index.html
+          grep -q "Мультисигнальный score" index.html
+          test ! -f scripts/apply_scoring_stage1.py
+          test ! -f .github/workflows/apply-scoring-stage1.yml
+
+      - name: Check ClientID selected-period presentation
+        run: |
+          grep -q "summarizeClientIds" assets/api-mode.js
+          grep -q "loadPeriodSummaries" assets/api-mode.js
+          grep -q "clientIdPeriods" assets/api-mode.js
+          grep -q "pathTemplate" assets/api-mode.js
+          grep -q "За выбранный период" assets/api-mode.js
+          grep -q "Уникальных ClientID" assets/api-mode.js
+          grep -q "Доля топ-1" assets/api-mode.js
+          grep -q "Доля топ-10" assets/api-mode.js
+          grep -q "Доля повторных визитов" assets/api-mode.js
+          grep -q "Пиковые дневные значения" assets/api-mode.js
+          grep -q "representativeThreshold" assets/api-mode.js
+          grep -q "Выборка:.*визитов с ClientID" assets/api-mode.js
+          grep -q "Exact period summary was not attached" scripts/validate_api_runtime.js
+          grep -q "Tiny day distorted top-1 maximum" scripts/validate_clientid_representative.js
+          grep -q "Tiny-only source should have no representative maxima" scripts/validate_clientid_representative.js
+
+      - name: Check MI baseline and drill-down extensions
+        run: |
+          grep -q "aggregateSliceGroups" assets/api-mode.js
+          grep -q "buildWarningModel" assets/api-mode.js
+          grep -q "sliceMetrics" assets/api-mode.js
+          grep -q "Отклонения относительно нормы источника" assets/api-mode.js
+          grep -q "Локализация аномалий" assets/api-mode.js
+          grep -q "Качество технических данных" assets/api-mode.js
+          grep -q "Поведенческие паттерны" assets/api-mode.js
+          grep -q "Referrer / домен" assets/api-mode.js
+          grep -q "MI extension validation passed" scripts/validate_mi_extensions.js
+          grep -q "warning-table" assets/api.css
+          grep -q "behavior-grid" assets/api.css
+
+      - name: Check API controls and campaign filter
+        run: |
+          test -f assets/api.css
+          test -f assets/api-mode.js
+          test -f scripts/validate_api_runtime.js
+          grep -q "api-counter-list" index.html
+          grep -q "api-date-from" index.html
+          grep -q "api-date-to" index.html
+          grep -q "api-analyze-button" index.html
+          grep -q "analyzeApiRows" assets/app-v2.js
+          grep -q "campaignFilterLabel" assets/api-mode.js
+          grep -q "catalog?.campaignFilter" assets/api-mode.js
+          grep -Fq "['prg', 'med', 'mrk']" assets/api-mode.js
+          grep -q "В анализ входят только кампании" assets/api-mode.js
+          grep -Fq 'campaign ${campaignFilterLabel()}' assets/api-mode.js
+          grep -q "function scoreDailyDays" assets/app-v2.js
+          grep -q "подозрительно высокое среднее время" assets/app-v2.js
+          grep -q "score += Math.min(28, clientIdScore)" assets/app-v2.js
+          grep -q "const MIN_SOURCE_VISITS = 20" assets/app-v2.js
+          grep -q "if (kind === 'tech') coerceClientIdsToText(rows, map)" assets/app-v2.js
+          ! grep -q "pdf-export-button" index.html
