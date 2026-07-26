@@ -184,7 +184,7 @@
     : `<p><b>${label}:</b> недостаточно репрезентативных дневных данных</p>`;
 
   const renderDailyPeaks = (daily) => `
-    <p><b>Пиковые дневные значения</b></p>
+    <p class="metric-section-heading metric-section-heading--peak"><b>Пиковые дневные значения</b></p>
     <p><small>Используются дни с покрытием ClientID от 50%, минимум 10 уникальными ClientID и не менее ${formatInt(daily.representativeThreshold)} визитов с ClientID.</small></p>
     <p><b>Репрезентативных дней:</b> ${formatInt(daily.representativeDays)}</p>
     ${peakMetric('Максимум визитов на ClientID', daily.maxVisitsPerClientId, formatDecimal)}
@@ -241,7 +241,7 @@
         : '';
       return `
         <h4>ClientID</h4>
-        <p><b>За выбранный период</b></p>
+        <p class="metric-section-heading metric-section-heading--period"><b>За выбранный период</b></p>
         <p><b>Доля визитов с полученным ClientID:</b> ${formatPct(summary.fallbackCoverage)} — ${coverageLevel(summary.fallbackCoverage)}</p>
         <p>Точный расчёт концентраций и разделение по статусу cookies ещё готовятся.${unavailable}</p>
         ${renderDailyPeaks(summary.daily)}`;
@@ -253,7 +253,7 @@
       : 'Объём или покрытие недостаточны для уверенной интерпретации концентраций.';
     return `
       <h4>ClientID</h4>
-      <p><b>За выбранный период</b></p>
+      <p class="metric-section-heading metric-section-heading--period"><b>За выбранный период</b></p>
       <p><b>Доля визитов с полученным ClientID:</b> ${formatPct(period.coverage)} — ${coverageLevel(period.coverage)}</p>
       <p><b>Визитов с ClientID:</b> ${formatInt(period.clientIdVisits)} из ${formatInt(period.visits)}</p>
       <p><b>Уникальных ClientID:</b> ${formatInt(period.uniqueClientIds)}</p>
@@ -312,7 +312,7 @@
     : `<p><b>${label}:</b> недостаточно репрезентативных дневных данных</p>`;
 
   const renderConcentrationPeakIntro = (daily) => `
-    <p><b>Пиковые дневные значения</b></p>
+    <p class="metric-section-heading metric-section-heading--peak"><b>Пиковые дневные значения</b></p>
     <p><small>Пики считаются только по дням с объёмом не менее ${formatInt(daily.representativeThreshold)} визитов. Даты могут не совпадать между собой и с аномальным днём по отказам или времени.</small></p>`;
 
   const renderNetworkBlock = (summary, unavailableCounters = []) => {
@@ -322,11 +322,11 @@
       : '';
     const periodHtml = hasExactConcentrations(period)
       ? `
-        <p><b>За выбранный период</b></p>
+        <p class="metric-section-heading metric-section-heading--period"><b>За выбранный период</b></p>
         <p><b>Топ IP:</b> ${formatPct(period.topIpShare)} <small>(${formatInt(period.topIpVisits)} визитов)</small></p>
         <p><b>Топ подсеть:</b> ${formatPct(period.topSubnetShare)} <small>(${formatInt(period.topSubnetVisits)} визитов)</small></p>`
       : `
-        <p><b>За выбранный период</b></p>
+        <p class="metric-section-heading metric-section-heading--period"><b>За выбранный период</b></p>
         <p>Точный периодный расчёт IP и подсетей ещё готовится.${unavailable}</p>`;
     return `
       <h4>IP и подсети</h4>
@@ -343,11 +343,11 @@
       : '';
     const periodHtml = hasExactConcentrations(period)
       ? `
-        <p><b>За выбранный период</b></p>
+        <p class="metric-section-heading metric-section-heading--period"><b>За выбранный период</b></p>
         <p><b>Топ браузер:</b> ${escapeHtml(period.topBrowser || '—')} · ${formatPct(period.topBrowserShare)} <small>(${formatInt(period.topBrowserVisits)} визитов)</small></p>
         <p><b>Топ связка:</b> ${escapeHtml(shorten(period.topProfile || '—'))} · ${formatPct(period.topProfileShare)} <small>(${formatInt(period.topProfileVisits)} визитов)</small></p>`
       : `
-        <p><b>За выбранный период</b></p>
+        <p class="metric-section-heading metric-section-heading--period"><b>За выбранный период</b></p>
         <p>Точный периодный расчёт браузеров и технических профилей ещё готовится.${unavailable}</p>`;
     return `
       <h4>Технический профиль</h4>
@@ -532,7 +532,7 @@
     return { source, baseline, warnings, browsers, groups: groups || [], sourceDailyVisits };
   };
 
-  const renderSignal = (item) => `<span class="warning-signal"><b>${escapeHtml(item.label)}:</b> ${item.formatter(item.current)} vs ${item.formatter(item.baseline)} <em>${escapeHtml(item.deltaText)}</em></span>`;
+  const renderSignal = (item) => `<span class="warning-signal warning-signal--anomaly"><b>${escapeHtml(item.label)}:</b> <strong class="anomaly-value">${item.formatter(item.current)}</strong> vs ${item.formatter(item.baseline)} <em>${escapeHtml(item.deltaText)}</em></span>`;
 
   const sparklineSvg = (group, sourceDailyVisits) => {
     const points = [...(group.days || new Map()).entries()]
@@ -623,15 +623,26 @@
     return `${delta >= 0 ? '+' : '−'}${formatter(Math.abs(delta))}`;
   };
 
+  const anomalyMetric = (value, formatter, active) => active
+    ? `<strong class="anomaly-value">${formatter(value)}</strong>`
+    : formatter(value);
+
   const segmentBehaviorHtml = (segment) => {
     if (!segment || !segment.visits) return '—';
     if (!segment.restVisits) return '<small>Нет сопоставимого остатка трафика</small>';
+    const bounceAnomaly = segment.bounce >= .55 && segment.bounce - segment.restBounce >= .15;
+    const timeAnomaly = (segment.time <= 15 && segment.restTime >= 45)
+      || (segment.time >= Math.max(180, segment.restTime * 2.5));
+    const depthAnomaly = segment.depth <= .6 * segment.restDepth
+      || segment.depth >= Math.max(4, segment.restDepth * 2.5);
+    const qualityAnomaly = segment.quality >= .02
+      && segment.quality >= Math.max(segment.restQuality * 5, segment.restQuality + .02);
     return `
       <div class="tech-behavior">
-        <span><b>Отказы:</b> ${formatPct(segment.bounce)} vs ${formatPct(segment.restBounce)} <em>${signedPp(segment.bounce, segment.restBounce)}</em></span>
-        <span><b>Время:</b> ${formatSeconds(segment.time)} vs ${formatSeconds(segment.restTime)} <em>${signedNumber(segment.time, segment.restTime, formatSeconds)}</em></span>
-        <span><b>Глубина:</b> ${formatDecimal(segment.depth)} vs ${formatDecimal(segment.restDepth)} <em>${signedNumber(segment.depth, segment.restDepth, formatDecimal)}</em></span>
-        <span><b>Кач. конверсия:</b> ${formatPct(segment.quality)} vs ${formatPct(segment.restQuality)} <em>${signedPp(segment.quality, segment.restQuality)}</em></span>
+        <span><b>Отказы:</b> ${anomalyMetric(segment.bounce, formatPct, bounceAnomaly)} vs ${formatPct(segment.restBounce)} <em class="${bounceAnomaly ? 'anomaly-delta' : ''}">${signedPp(segment.bounce, segment.restBounce)}</em></span>
+        <span><b>Время:</b> ${anomalyMetric(segment.time, formatSeconds, timeAnomaly)} vs ${formatSeconds(segment.restTime)} <em class="${timeAnomaly ? 'anomaly-delta' : ''}">${signedNumber(segment.time, segment.restTime, formatSeconds)}</em></span>
+        <span><b>Глубина:</b> ${anomalyMetric(segment.depth, formatDecimal, depthAnomaly)} vs ${formatDecimal(segment.restDepth)} <em class="${depthAnomaly ? 'anomaly-delta' : ''}">${signedNumber(segment.depth, segment.restDepth, formatDecimal)}</em></span>
+        <span><b>Кач. конверсия:</b> ${anomalyMetric(segment.quality, formatPct, qualityAnomaly)} vs ${formatPct(segment.restQuality)} <em class="${qualityAnomaly ? 'anomaly-delta' : ''}">${signedPp(segment.quality, segment.restQuality)}</em></span>
       </div>`;
   };
 
@@ -654,15 +665,25 @@
     const denominatorNote = key === 'unknownMobileModel'
       ? `<small>из ${formatInt(period.mobileTabletVisits)} mobile/tablet-визитов</small>`
       : `<small>из ${formatInt(segment.denominatorVisits || period.visits)} визитов</small>`;
-    return `${formatInt(segment.visits)} · ${formatPct(segment.share)}<br>${denominatorNote}`;
+    const suspiciousShare = key !== 'cookieOn' && Number(segment.share) >= .15;
+    const shareHtml = suspiciousShare
+      ? `<strong class="anomaly-value">${formatPct(segment.share)}</strong>`
+      : formatPct(segment.share);
+    return `${formatInt(segment.visits)} · ${shareHtml}<br>${denominatorNote}`;
   };
 
   const segmentDailyHtml = (segment) => {
     if (!segment) return '—';
+    const typical = Number(segment.dailyTypicalShare) || 0;
+    const maximum = Number(segment.dailyMaxShare) || 0;
+    const peakAnomaly = maximum >= .20 && maximum >= Math.max(typical * 1.8, typical + .08);
+    const peakShare = peakAnomaly
+      ? `<strong class="anomaly-value">${formatPct(maximum)}</strong>`
+      : formatPct(maximum);
     const peak = segment.dailyMaxDate
-      ? `${formatPct(segment.dailyMaxShare)} — ${formatDate(segment.dailyMaxDate)}<br><small>${formatInt(segment.dailyMaxVisits)} из ${formatInt(segment.dailyMaxSourceVisits)}</small>`
+      ? `${peakShare} — ${formatDate(segment.dailyMaxDate)}<br><small>${formatInt(segment.dailyMaxVisits)} из ${formatInt(segment.dailyMaxSourceVisits)}</small>`
       : 'не было';
-    return `<b>Обычно:</b> ${formatPct(segment.dailyTypicalShare)}<br><b>Пик:</b> ${peak}`;
+    return `<b>Обычно:</b> ${formatPct(typical)}<br><b>Пик:</b> ${peak}`;
   };
 
   const renderTechnicalSegmentRows = (rows, segments, period, includeZeroCookies = false) => rows
