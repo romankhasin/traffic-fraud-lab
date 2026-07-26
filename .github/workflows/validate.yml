@@ -1,14 +1,7 @@
 name: Apply and validate MI antifraud UI
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/validate.yml"
-      - "scripts/apply_mi_stages_1_2.py"
-      - "scripts/apply_mi_ui_a.py"
-      - "scripts/apply_mi_ui_b.py"
-      - "scripts/apply_mi_ui_c.py"
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,8 +11,10 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout PR branch
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,7 +52,7 @@ jobs:
           grep -q "Качество технических данных" assets/api-mode.js
           grep -q "mi-warning-table" assets/api.css
 
-      - name: Commit applied files
+      - name: Commit applied files to PR branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -66,6 +61,5 @@ jobs:
             echo "No UI migration changes"
           else
             git commit -m "Add MI baseline warnings and drill-down diagnostics"
-            git pull --rebase origin main
-            git push origin HEAD:main
+            git push origin HEAD:${{ github.head_ref }}
           fi
