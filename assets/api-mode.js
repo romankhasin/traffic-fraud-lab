@@ -191,6 +191,46 @@
     ${peakMetric('Максимальная доля топ-1', daily.maxTop1, formatPct)}
     ${peakMetric('Максимальная доля топ-10', daily.maxTop10, formatPct)}`;
 
+
+  const COOKIE_STATUS_LABELS = {
+    on: 'Cookies включены',
+    off: 'Cookies выключены',
+    unknown: 'Статус не определён'
+  };
+
+  const renderCookieClientRow = (status, segment) => `
+    <tr>
+      <td><b>${COOKIE_STATUS_LABELS[status]}</b></td>
+      <td>${formatInt(segment?.visits)}<br><small>${formatPct(segment?.share)} трафика</small></td>
+      <td>${formatInt(segment?.clientIdVisits)}<br><small>${formatPct(segment?.coverage)} с ClientID</small></td>
+      <td>${formatInt(segment?.uniqueClientIds)}</td>
+      <td>${formatDecimal(segment?.visitsPerClientId)}</td>
+      <td>${formatPct(segment?.top1Share)}<br><small>${formatInt(segment?.top1Visits)} визитов</small></td>
+      <td>${formatPct(segment?.top10Share)}<br><small>${formatInt(segment?.top10Visits)} визитов</small></td>
+      <td>${formatPct(segment?.repeatClientVisitShare)}</td>
+    </tr>`;
+
+  const renderCookieClientTable = (period) => {
+    const segmented = period?.clientIdByCookie;
+    if (!segmented) {
+      return '<p class="method-note">Раздельный расчёт ClientID по статусу cookies ещё готовится.</p>';
+    }
+    const offShare = Number(segmented.off?.share) || 0;
+    const unknownShare = Number(segmented.unknown?.share) || 0;
+    const constrained = offShare + unknownShare > .15;
+    const reliability = constrained
+      ? `<div class="tech-method-alert tech-method-alert--warning"><b>Интерпретация общей уникальности ограничена.</b> ${formatPct(offShare)} визитов зафиксированы с cookies off, ещё ${formatPct(unknownShare)} — с неопределённым статусом. Сравнивайте концентрации отдельно по сегментам; наличие ClientID не гарантирует устойчивость идентификатора между визитами.</div>`
+      : `<div class="tech-method-alert"><b>Надёжность анализа ClientID достаточная.</b> Доля cookies off и неизвестного статуса составляет ${formatPct(offShare + unknownShare)}.</div>`;
+    return `
+      ${reliability}
+      <div class="table-wrap cookie-client-table-wrap">
+        <table class="mini-table cookie-client-table">
+          <thead><tr><th>Сегмент</th><th>Визиты</th><th>Получен ClientID</th><th>Уникальные ID</th><th>Визитов / ID</th><th>Топ-1</th><th>Топ-10</th><th>Повторные визиты</th></tr></thead>
+          <tbody>${['on', 'off', 'unknown'].map((status) => renderCookieClientRow(status, segmented[status] || {})).join('')}</tbody>
+        </table>
+      </div>`;
+  };
+
   const renderClientIdBlock = (summary, unavailableCounters) => {
     if (!summary.hasClientIds) {
       return '<h4>ClientID</h4><p>ClientID не найден в выбранных данных.</p>';
@@ -202,8 +242,8 @@
       return `
         <h4>ClientID</h4>
         <p><b>За выбранный период</b></p>
-        <p><b>Покрытие ClientID:</b> ${formatPct(summary.fallbackCoverage)} — ${coverageLevel(summary.fallbackCoverage)}</p>
-        <p>Точный расчёт top-1, top-10 и уникальных ClientID за период ещё готовится.${unavailable}</p>
+        <p><b>Доля визитов с полученным ClientID:</b> ${formatPct(summary.fallbackCoverage)} — ${coverageLevel(summary.fallbackCoverage)}</p>
+        <p>Точный расчёт концентраций и разделение по статусу cookies ещё готовятся.${unavailable}</p>
         ${renderDailyPeaks(summary.daily)}`;
     }
 
@@ -214,7 +254,7 @@
     return `
       <h4>ClientID</h4>
       <p><b>За выбранный период</b></p>
-      <p><b>Покрытие ClientID:</b> ${formatPct(period.coverage)} — ${coverageLevel(period.coverage)}</p>
+      <p><b>Доля визитов с полученным ClientID:</b> ${formatPct(period.coverage)} — ${coverageLevel(period.coverage)}</p>
       <p><b>Визитов с ClientID:</b> ${formatInt(period.clientIdVisits)} из ${formatInt(period.visits)}</p>
       <p><b>Уникальных ClientID:</b> ${formatInt(period.uniqueClientIds)}</p>
       <p><b>Визитов на ClientID:</b> ${formatDecimal(period.visitsPerClientId)}</p>
@@ -222,7 +262,8 @@
       <p><b>Доля топ-10:</b> ${formatPct(period.top10Share)} <small>(${formatInt(period.top10Visits)} визитов)</small></p>
       <p><b>Доля повторных визитов:</b> ${formatPct(period.repeatClientVisitShare)}</p>
       <p><b>Дней с трафиком:</b> ${formatInt(period.activeDays)}</p>
-      <p>Высокое покрытие повышает надёжность оценки и не является фрод-сигналом. ${reliability}</p>
+      <p>Полученный ClientID показывает наличие значения в Logs API, но не доказывает устойчивость идентификатора. ${reliability}</p>
+      ${renderCookieClientTable(period)}
       ${renderDailyPeaks(summary.daily)}`;
   };
 
@@ -553,32 +594,137 @@
         </details>`).join('')}</div>`;
   };
 
-  const qualityRows = [
-    ['zeroResolution', 'Разрешение 0×0'],
-    ['unknownResolution', 'Разрешение не определено'],
-    ['unknownBrowser', 'Браузер не определён'],
-    ['unknownOs', 'ОС не определена'],
-    ['unknownModel', 'Модель mobile/tablet не определена'],
+
+  const TECH_SEGMENT_ROWS = [
+    ['cookieOn', 'Cookies включены'],
+    ['cookieOff', 'Cookies выключены'],
+    ['cookieUnknown', 'Статус cookies не определён'],
     ['missingReferrer', 'Referrer не определён'],
-    ['ipv6', 'IPv6'],
-    ['cookieDisabled', 'Cookies выключены']
+    ['resolutionUnavailable', 'Разрешение недоступно'],
+    ['unknownMobileModel', 'Модель mobile/tablet не определена'],
+    ['ipv6', 'IPv6']
   ];
 
-  const qualityComment = (code, share) => {
-    if (code === 'ipv6') return share >= .10 ? 'Контекст для дополнительной проверки, не самостоятельный фрод-сигнал.' : 'В пределах наблюдаемого технического контекста.';
-    if (code === 'missingReferrer') return share >= .50 ? 'Проверить in-app, редиректы и передачу referrer.' : 'Может зависеть от in-app и политики передачи referrer.';
-    if (code === 'zeroResolution') return share >= .05 ? 'Проверить in-app и корректность передачи размеров экрана.' : 'Небольшая доля технически неполных визитов.';
-    return share >= .10 ? 'Высокая доля; использовать как подтверждающий, а не самостоятельный сигнал.' : 'Сам по себе показатель не доказывает фрод.';
+  const TECH_INTERSECTION_ROWS = [
+    ['cookieOffMissingReferrer', 'Cookies off + нет referrer'],
+    ['cookieOffResolutionUnavailable', 'Cookies off + недоступно разрешение'],
+    ['cookieOffUnknownMobileModel', 'Cookies off + неизвестна mobile/tablet-модель'],
+    ['missingReferrerUnknownMobileModel', 'Нет referrer + неизвестна mobile/tablet-модель'],
+    ['cookieOffMissingReferrerResolutionUnavailable', 'Cookies off + нет referrer + недоступно разрешение']
+  ];
+
+  const signedPp = (current, baseline) => {
+    const delta = (Number(current) || 0) - (Number(baseline) || 0);
+    return `${delta >= 0 ? '+' : ''}${(delta * 100).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} п.п.`;
+  };
+
+  const signedNumber = (current, baseline, formatter) => {
+    const delta = (Number(current) || 0) - (Number(baseline) || 0);
+    return `${delta >= 0 ? '+' : '−'}${formatter(Math.abs(delta))}`;
+  };
+
+  const segmentBehaviorHtml = (segment) => {
+    if (!segment || !segment.visits) return '—';
+    if (!segment.restVisits) return '<small>Нет сопоставимого остатка трафика</small>';
+    return `
+      <div class="tech-behavior">
+        <span><b>Отказы:</b> ${formatPct(segment.bounce)} vs ${formatPct(segment.restBounce)} <em>${signedPp(segment.bounce, segment.restBounce)}</em></span>
+        <span><b>Время:</b> ${formatSeconds(segment.time)} vs ${formatSeconds(segment.restTime)} <em>${signedNumber(segment.time, segment.restTime, formatSeconds)}</em></span>
+        <span><b>Глубина:</b> ${formatDecimal(segment.depth)} vs ${formatDecimal(segment.restDepth)} <em>${signedNumber(segment.depth, segment.restDepth, formatDecimal)}</em></span>
+        <span><b>Кач. конверсия:</b> ${formatPct(segment.quality)} vs ${formatPct(segment.restQuality)} <em>${signedPp(segment.quality, segment.restQuality)}</em></span>
+      </div>`;
+  };
+
+  const segmentInsight = (segment) => {
+    if (!segment?.visits || !segment.restVisits) return 'Недостаточно данных для сравнения поведения.';
+    const bounceGap = Math.abs((Number(segment.bounce) || 0) - (Number(segment.restBounce) || 0));
+    const timeRatio = Math.max(Number(segment.time) || 0, Number(segment.restTime) || 0)
+      / Math.max(1, Math.min(Number(segment.time) || 0, Number(segment.restTime) || 0));
+    const depthRatio = Math.max(Number(segment.depth) || 0, Number(segment.restDepth) || 0)
+      / Math.max(.1, Math.min(Number(segment.depth) || 0, Number(segment.restDepth) || 0));
+    const qualityGap = Math.abs((Number(segment.quality) || 0) - (Number(segment.restQuality) || 0));
+    const signals = Number(bounceGap >= .20) + Number(timeRatio >= 2) + Number(depthRatio >= 2) + Number(qualityGap >= .02);
+    if (signals >= 2) return 'Технический признак подтверждается несколькими поведенческими отличиями.';
+    if (signals === 1) return 'Есть заметное поведенческое отличие — требуется проверка контекста.';
+    return 'Поведение близко к остальному трафику; вероятна техническая особенность канала.';
+  };
+
+  const segmentPeriodHtml = (key, segment, period) => {
+    if (!segment) return '—';
+    const denominatorNote = key === 'unknownMobileModel'
+      ? `<small>из ${formatInt(period.mobileTabletVisits)} mobile/tablet-визитов</small>`
+      : `<small>из ${formatInt(segment.denominatorVisits || period.visits)} визитов</small>`;
+    return `${formatInt(segment.visits)} · ${formatPct(segment.share)}<br>${denominatorNote}`;
+  };
+
+  const segmentDailyHtml = (segment) => {
+    if (!segment) return '—';
+    const peak = segment.dailyMaxDate
+      ? `${formatPct(segment.dailyMaxShare)} — ${formatDate(segment.dailyMaxDate)}<br><small>${formatInt(segment.dailyMaxVisits)} из ${formatInt(segment.dailyMaxSourceVisits)}</small>`
+      : 'не было';
+    return `<b>Обычно:</b> ${formatPct(segment.dailyTypicalShare)}<br><b>Пик:</b> ${peak}`;
+  };
+
+  const renderTechnicalSegmentRows = (rows, segments, period, includeZeroCookies = false) => rows
+    .filter(([key]) => includeZeroCookies || Number(segments?.[key]?.visits) > 0)
+    .map(([key, label]) => {
+      const segment = segments?.[key] || null;
+      return `
+        <tr>
+          <td><b>${escapeHtml(label)}</b><br><small>${escapeHtml(segmentInsight(segment))}</small></td>
+          <td>${segmentPeriodHtml(key, segment, period)}</td>
+          <td>${segmentBehaviorHtml(segment)}</td>
+          <td>${segmentDailyHtml(segment)}</td>
+        </tr>`;
+    }).join('');
+
+  const renderLegacyQualityBlock = (period) => {
+    const rows = [
+      ['Разрешение 0×0', period.zeroResolutionVisits, period.zeroResolutionShare],
+      ['Разрешение не определено', period.unknownResolutionVisits, period.unknownResolutionShare],
+      ['Браузер не определён', period.unknownBrowserVisits, period.unknownBrowserShare],
+      ['ОС не определена', period.unknownOsVisits, period.unknownOsShare],
+      ['Модель mobile/tablet не определена', period.unknownModelVisits, period.unknownModelShare],
+      ['Referrer не определён', period.missingReferrerVisits, period.missingReferrerShare],
+      ['IPv6', period.ipv6Visits, period.ipv6Share],
+      ['Cookies выключены или статус отсутствует', period.cookieDisabledVisits, period.cookieDisabledShare]
+    ].filter(([, visits]) => Number(visits) > 0)
+      .map(([label, visits, share]) => `<tr><td>${escapeHtml(label)}</td><td>${formatInt(visits)}</td><td>${formatPct(share)}</td></tr>`)
+      .join('');
+    return `<h4>Качество технических данных</h4><p>Расширенный расчёт on/off/unknown, поведения и дневных пиков ещё готовится.</p>${rows ? `<div class="table-wrap"><table class="mini-table"><thead><tr><th>Показатель</th><th>Визиты</th><th>Доля</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}`;
   };
 
   const renderQualityBlock = (period) => {
     if (!period) return '<h4>Качество технических данных</h4><p>Периодные показатели ещё готовятся.</p>';
-    const rows = qualityRows.map(([code, label]) => {
-      const visits = Number(period[`${code}Visits`]) || 0;
-      const share = Number(period[`${code}Share`]) || 0;
-      return `<tr><td>${escapeHtml(label)}</td><td>${formatInt(visits)}</td><td>${formatPct(share)}</td><td>${escapeHtml(qualityComment(code, share))}</td></tr>`;
-    }).join('');
-    return `<h4>Качество технических данных</h4><p><small>Техническая неполнота отделена от оценки фрода: эти признаки повышают внимание только в сочетании с аномалиями поведения или качества.</small></p><div class="table-wrap"><table class="mini-table"><thead><tr><th>Показатель</th><th>Визиты</th><th>Доля</th><th>Как читать</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const segments = period.technicalSegments;
+    if (!segments) return renderLegacyQualityBlock(period);
+
+    const baseRows = renderTechnicalSegmentRows(TECH_SEGMENT_ROWS, segments, period, true);
+    const intersectionRows = renderTechnicalSegmentRows(
+      TECH_INTERSECTION_ROWS,
+      period.technicalIntersections || segments,
+      period,
+      false
+    );
+    const zeroResolved = [
+      ['браузер', period.unknownBrowserVisits],
+      ['ОС', period.unknownOsVisits]
+    ].filter(([, visits]) => !Number(visits)).map(([label]) => label);
+    const resolutionDetail = `Разрешение недоступно: ${formatInt((Number(period.zeroResolutionVisits) || 0) + (Number(period.unknownResolutionVisits) || 0))} визитов, включая ${formatInt(period.zeroResolutionVisits)} как 0×0 и ${formatInt(period.unknownResolutionVisits)} без значения.`;
+    return `
+      <h4>Качество технических данных и поведение</h4>
+      <p><small>Каждый технический сегмент сравнивается с остальным сопоставимым трафиком этой же площадки. Для неизвестной mobile/tablet-модели знаменатель и сравнение ограничены мобильными и планшетными визитами.</small></p>
+      <div class="table-wrap tech-segment-table-wrap">
+        <table class="mini-table tech-segment-table">
+          <thead><tr><th>Технический сегмент</th><th>За период</th><th>Поведение сегмента vs остальное</th><th>Обычный день и пик</th></tr></thead>
+          <tbody>${baseRows}</tbody>
+        </table>
+      </div>
+      <p class="method-note">${escapeHtml(resolutionDetail)}${zeroResolved.length ? ` ${escapeHtml(zeroResolved.join(' и '))} определены во всех визитах.` : ''}</p>
+      <h5>Пересечения технических признаков</h5>
+      ${intersectionRows
+        ? `<div class="table-wrap tech-segment-table-wrap"><table class="mini-table tech-segment-table"><thead><tr><th>Комбинация</th><th>За период</th><th>Поведение vs остальное</th><th>Обычный день и пик</th></tr></thead><tbody>${intersectionRows}</tbody></table></div>`
+        : '<p>Заранее заданных пересечений с ненулевым объёмом не найдено.</p>'}`;
   };
 
   const behaviorItem = (label, visits, share, note) => `<div class="behavior-item"><strong>${formatInt(visits)}</strong><span>${escapeHtml(label)} · ${formatPct(share)}</span><small>${escapeHtml(note)}</small></div>`;
