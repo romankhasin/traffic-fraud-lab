@@ -6,6 +6,9 @@ on:
     paths:
       - ".github/workflows/validate.yml"
       - "scripts/apply_mi_stages_1_2.py"
+      - "scripts/apply_mi_ui_a.py"
+      - "scripts/apply_mi_ui_b.py"
+      - "scripts/apply_mi_ui_c.py"
   workflow_dispatch:
 
 permissions:
@@ -25,9 +28,9 @@ jobs:
 
       - name: Apply pending MI migration
         run: |
-          if [ -f scripts/apply_mi_stages_1_2.py ]; then
-            python scripts/apply_mi_stages_1_2.py
-          fi
+          if [ -f scripts/apply_mi_ui_a.py ]; then python scripts/apply_mi_ui_a.py; fi
+          if [ -f scripts/apply_mi_ui_b.py ]; then python scripts/apply_mi_ui_b.py; fi
+          if [ -f scripts/apply_mi_ui_c.py ]; then python scripts/apply_mi_ui_c.py; fi
 
       - name: Check JavaScript syntax
         run: |
