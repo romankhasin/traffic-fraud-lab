@@ -55,6 +55,9 @@ if (!global.FraudLab || typeof global.FraudLab.analyzeApiRows !== 'function') {
 if (!global.FraudLabApiHelpers || typeof global.FraudLabApiHelpers.summarizeClientIds !== 'function') {
   throw new Error('ClientID API helpers were not exposed');
 }
+if (typeof global.FraudLabApiHelpers.summarizeConcentrations !== 'function') {
+  throw new Error('Period concentration helpers were not exposed');
+}
 
 const rows = [];
 const sources = ['stable_source', 'spike_source'];
@@ -74,7 +77,7 @@ for (const source of sources) {
       tech: { visits, users: Math.round(visits * 0.9), bounce, time: duration, newShare: 0.9, quality: 0.01, primary: 0 },
       ip: { visits, users: Math.round(visits * 0.9), bounce, time: duration, newShare: 0.9, quality: 0.01, primary: 0 },
       metrics: { visits, users: Math.round(visits * 0.9), bounce, time: duration, newShare: 0.9, quality: 0.01, primary: 0 },
-      topBrowser: { key: 'chrome 149', value: Math.round(visits * 0.55), share: 0.55 },
+      topBrowser: { key: 'chrome 149', value: Math.round(visits * (anomaly ? 0.62 : 0.55)), share: anomaly ? 0.62 : 0.55 },
       topResolution: { key: '1920x1080', value: Math.round(visits * 0.35), share: 0.35 },
       topProfile: { key: 'chrome · windows · desktop · 1920x1080', value: Math.round(visits * (anomaly ? 0.82 : 0.28)), share: anomaly ? 0.82 : 0.28 },
       topIp: { key: 'скрыто', value: Math.round(visits * (anomaly ? 0.3 : 0.01)), share: anomaly ? 0.3 : 0.01 },
@@ -121,6 +124,16 @@ const periodSummaries = new Map([
     top10Share: 310 / 9025,
     visitsPerClientId: 9025 / 8200,
     repeatClientVisitShare: (9025 - 8200) / 9025,
+    topIpVisits: 95,
+    topIpShare: 0.01,
+    topSubnetVisits: 285,
+    topSubnetShare: 0.03,
+    topBrowser: 'chrome 149',
+    topBrowserVisits: 5100,
+    topBrowserShare: 5100 / 9500,
+    topProfile: 'chrome · windows · desktop · 1920x1080',
+    topProfileVisits: 2500,
+    topProfileShare: 2500 / 9500,
     activeDays: 10,
     representative: true,
   }],
@@ -137,6 +150,29 @@ if (stableClientId.daily.representativeDays !== 10 || !stableClientId.daily.maxT
 const clientHtml = global.FraudLabApiHelpers.renderClientIdBlock(stableClientId, []);
 if (!clientHtml.includes('За выбранный период') || !clientHtml.includes('Доля топ-1') || !clientHtml.includes('Пиковые дневные значения')) {
   throw new Error(`Selected-period ClientID block was not rendered: ${clientHtml}`);
+}
+
+const concentrationSummaries = global.FraudLabApiHelpers.summarizeConcentrations(rows, periodSummaries);
+const stableConcentration = concentrationSummaries.get('stable_source');
+if (!stableConcentration?.period || stableConcentration.period.topIpVisits !== 95) {
+  throw new Error(`Exact concentration period summary was not attached: ${JSON.stringify(stableConcentration)}`);
+}
+const networkHtml = global.FraudLabApiHelpers.renderNetworkBlock(stableConcentration, []);
+if (!networkHtml.includes('За выбранный период') || !networkHtml.includes('Топ IP') || !networkHtml.includes('Максимальная доля топ-IP') || !networkHtml.includes('01.07.2026')) {
+  throw new Error(`Network period and dated peak block was not rendered: ${networkHtml}`);
+}
+const technicalHtml = global.FraudLabApiHelpers.renderTechnicalBlock(stableConcentration, []);
+if (!technicalHtml.includes('Топ браузер') || !technicalHtml.includes('Максимальная доля топ-браузера') || !technicalHtml.includes('chrome 149') || !technicalHtml.includes('01.07.2026')) {
+  throw new Error(`Technical period and dated peak block was not rendered: ${technicalHtml}`);
+}
+const spikeConcentration = concentrationSummaries.get('spike_source');
+const spikeNetworkHtml = global.FraudLabApiHelpers.renderNetworkBlock(spikeConcentration, ['test counter']);
+if (!spikeNetworkHtml.includes('09.07.2026') || !spikeNetworkHtml.includes('30,0%')) {
+  throw new Error(`Daily peak date was not preserved independently: ${spikeNetworkHtml}`);
+}
+const spikeTechnicalHtml = global.FraudLabApiHelpers.renderTechnicalBlock(spikeConcentration, ['test counter']);
+if (!spikeTechnicalHtml.includes('09.07.2026') || !spikeTechnicalHtml.includes('82,0%')) {
+  throw new Error(`Technical daily peak date was not preserved independently: ${spikeTechnicalHtml}`);
 }
 
 const result = global.FraudLab.analyzeApiRows(rows, {
