@@ -35,6 +35,17 @@
       ? String(value || '—')
       : date.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' });
   };
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  }[character]));
+  const shorten = (value, maximum = 110) => {
+    const text = String(value || '—');
+    return text.length > maximum ? `${text.slice(0, maximum - 1)}…` : text;
+  };
 
   const campaignFilterLabel = () => {
     const tokens = Array.isArray(catalog?.campaignFilter) && catalog.campaignFilter.length
@@ -77,16 +88,21 @@
     return safe.length % 2 ? safe[middle] : (safe[middle - 1] + safe[middle]) / 2;
   };
 
-  const maxBy = (rows, getter) => rows.reduce((best, row) => {
-    const value = Number(getter(row)) || 0;
-    return !best || value > best.value
-      ? {
-          value,
-          date: String(row.date || ''),
-          sampleVisits: Number(row.clientIdVisits) || 0
-        }
-      : best;
-  }, null) || { value: 0, date: '', sampleVisits: 0 };
+  const maxBy = (rows, getter, options = {}) => {
+    const sampleGetter = options.sampleGetter || ((row) => row.visits);
+    const keyGetter = options.keyGetter || (() => '');
+    return rows.reduce((best, row) => {
+      const value = Number(getter(row)) || 0;
+      return !best || value > best.value
+        ? {
+            value,
+            date: String(row.date || ''),
+            sampleVisits: Number(sampleGetter(row)) || 0,
+            key: String(keyGetter(row) || '')
+          }
+        : best;
+    }, null) || { value: 0, date: '', sampleVisits: 0, key: '' };
+  };
 
   const coverageLevel = (coverage) => {
     if (coverage >= .95) return 'высокое';
@@ -108,12 +124,13 @@
       && (Number(row.clientIdCoverage) || 0) >= .5
       && (Number(row.uniqueClientIds) || 0) >= 10
     ));
+    const options = { sampleGetter: (row) => row.clientIdVisits };
     return {
       representativeDays: representativeRows.length,
       representativeThreshold,
-      maxVisitsPerClientId: maxBy(representativeRows, (row) => row.visitsPerClientId),
-      maxTop1: maxBy(representativeRows, (row) => row.topClientId?.share),
-      maxTop10: maxBy(representativeRows, (row) => row.top10ClientShare)
+      maxVisitsPerClientId: maxBy(representativeRows, (row) => row.visitsPerClientId, options),
+      maxTop1: maxBy(representativeRows, (row) => row.topClientId?.share, options),
+      maxTop10: maxBy(representativeRows, (row) => row.top10ClientShare, options)
     };
   };
 
@@ -186,20 +203,126 @@
       ${renderDailyPeaks(summary.daily)}`;
   };
 
-  const patchClientIdBlocks = (rows, periodSummaries, unavailableCounters = []) => {
-    const summaries = summarizeClientIds(rows, periodSummaries);
+  const summarizeConcentrationDailyPeaks = (sourceRows) => {
+    const peers = sourceRows.filter((row) => (Number(row.visits) || 0) >= 100);
+    const typicalVisits = median(peers.map((row) => row.visits));
+    const representativeThreshold = Math.max(200, typicalVisits * .15);
+    const representativeRows = sourceRows.filter((row) => (Number(row.visits) || 0) >= representativeThreshold);
+    return {
+      representativeDays: representativeRows.length,
+      representativeThreshold,
+      maxTopIp: maxBy(representativeRows, (row) => row.topIp?.share),
+      maxTopSubnet: maxBy(representativeRows, (row) => row.topSubnet?.share),
+      maxTopBrowser: maxBy(representativeRows, (row) => row.topBrowser?.share, {
+        keyGetter: (row) => row.topBrowser?.key
+      }),
+      maxTopProfile: maxBy(representativeRows, (row) => row.topProfile?.share, {
+        keyGetter: (row) => row.topProfile?.key
+      })
+    };
+  };
+
+  const summarizeConcentrations = (rows, periodSummaries = new Map()) => {
+    const grouped = new Map();
+    for (const row of rows || []) {
+      const source = String(row.source || 'Не определено');
+      if (!grouped.has(source)) grouped.set(source, []);
+      grouped.get(source).push(row);
+    }
+    return new Map([...grouped.entries()].map(([source, sourceRows]) => [source, {
+      period: periodSummaries.get(source) || null,
+      daily: summarizeConcentrationDailyPeaks(sourceRows)
+    }]));
+  };
+
+  const hasExactConcentrations = (period) => Boolean(
+    period
+    && Number.isFinite(Number(period.topIpShare))
+    && Number.isFinite(Number(period.topSubnetShare))
+    && Number.isFinite(Number(period.topBrowserShare))
+    && Number.isFinite(Number(period.topProfileShare))
+  );
+
+  const concentrationPeakMetric = (label, metric, showKey = false) => metric.date
+    ? `<p><b>${label}:</b> ${showKey && metric.key ? `${escapeHtml(shorten(metric.key))} · ` : ''}${formatPct(metric.value)} — ${formatDate(metric.date)}<br><small>Выборка: ${formatInt(metric.sampleVisits)} визитов</small></p>`
+    : `<p><b>${label}:</b> недостаточно репрезентативных дневных данных</p>`;
+
+  const renderConcentrationPeakIntro = (daily) => `
+    <p><b>Пиковые дневные значения</b></p>
+    <p><small>Пики считаются только по дням с объёмом не менее ${formatInt(daily.representativeThreshold)} визитов. Даты могут не совпадать между собой и с аномальным днём по отказам или времени.</small></p>`;
+
+  const renderNetworkBlock = (summary, unavailableCounters = []) => {
+    const period = summary.period;
+    const unavailable = unavailableCounters.length
+      ? ` Периодные данные пока недоступны для: ${unavailableCounters.join(', ')}.`
+      : '';
+    const periodHtml = hasExactConcentrations(period)
+      ? `
+        <p><b>За выбранный период</b></p>
+        <p><b>Топ IP:</b> ${formatPct(period.topIpShare)} <small>(${formatInt(period.topIpVisits)} визитов)</small></p>
+        <p><b>Топ подсеть:</b> ${formatPct(period.topSubnetShare)} <small>(${formatInt(period.topSubnetVisits)} визитов)</small></p>`
+      : `
+        <p><b>За выбранный период</b></p>
+        <p>Точный периодный расчёт IP и подсетей ещё готовится.${unavailable}</p>`;
+    return `
+      <h4>IP и подсети</h4>
+      ${periodHtml}
+      ${renderConcentrationPeakIntro(summary.daily)}
+      ${concentrationPeakMetric('Максимальная доля топ-IP', summary.daily.maxTopIp)}
+      ${concentrationPeakMetric('Максимальная доля топ-подсети', summary.daily.maxTopSubnet)}`;
+  };
+
+  const renderTechnicalBlock = (summary, unavailableCounters = []) => {
+    const period = summary.period;
+    const unavailable = unavailableCounters.length
+      ? ` Периодные данные пока недоступны для: ${unavailableCounters.join(', ')}.`
+      : '';
+    const periodHtml = hasExactConcentrations(period)
+      ? `
+        <p><b>За выбранный период</b></p>
+        <p><b>Топ браузер:</b> ${escapeHtml(period.topBrowser || '—')} · ${formatPct(period.topBrowserShare)} <small>(${formatInt(period.topBrowserVisits)} визитов)</small></p>
+        <p><b>Топ связка:</b> ${escapeHtml(shorten(period.topProfile || '—'))} · ${formatPct(period.topProfileShare)} <small>(${formatInt(period.topProfileVisits)} визитов)</small></p>`
+      : `
+        <p><b>За выбранный период</b></p>
+        <p>Точный периодный расчёт браузеров и технических профилей ещё готовится.${unavailable}</p>`;
+    return `
+      <h4>Технический профиль</h4>
+      ${periodHtml}
+      ${renderConcentrationPeakIntro(summary.daily)}
+      ${concentrationPeakMetric('Максимальная доля топ-браузера', summary.daily.maxTopBrowser, true)}
+      ${concentrationPeakMetric('Максимальная доля топ-связки', summary.daily.maxTopProfile, true)}`;
+  };
+
+  const patchMetricBlocks = (rows, periodSummaries, unavailableCounters = []) => {
+    const clientSummaries = summarizeClientIds(rows, periodSummaries);
+    const concentrationSummaries = summarizeConcentrations(rows, periodSummaries);
     for (const card of document.querySelectorAll('.source-card')) {
       const sourceName = card.querySelector('summary h3')?.textContent?.trim();
-      const summary = summaries.get(sourceName);
-      if (!summary) continue;
-      const section = [...card.querySelectorAll('section.detail')]
-        .find((candidate) => candidate.querySelector('h4')?.textContent?.trim().startsWith('ClientID'));
-      if (!section) continue;
-      section.innerHTML = renderClientIdBlock(summary, unavailableCounters);
+      if (!sourceName) continue;
+      const sections = [...card.querySelectorAll('section.detail')];
+
+      const clientSection = sections.find((candidate) => candidate.querySelector('h4')?.textContent?.trim().startsWith('ClientID'));
+      const clientSummary = clientSummaries.get(sourceName);
+      if (clientSection && clientSummary) clientSection.innerHTML = renderClientIdBlock(clientSummary, unavailableCounters);
+
+      const concentrationSummary = concentrationSummaries.get(sourceName);
+      if (!concentrationSummary) continue;
+      const networkSection = sections.find((candidate) => candidate.querySelector('h4')?.textContent?.trim().startsWith('IP и подсети'));
+      if (networkSection) networkSection.innerHTML = renderNetworkBlock(concentrationSummary, unavailableCounters);
+      const technicalSection = sections.find((candidate) => candidate.querySelector('h4')?.textContent?.trim().startsWith('Технический профиль'));
+      if (technicalSection) technicalSection.innerHTML = renderTechnicalBlock(concentrationSummary, unavailableCounters);
     }
   };
 
-  window.FraudLabApiHelpers = Object.freeze({ summarizeClientIds, summarizeDailyPeaks, renderClientIdBlock });
+  window.FraudLabApiHelpers = Object.freeze({
+    summarizeClientIds,
+    summarizeDailyPeaks,
+    renderClientIdBlock,
+    summarizeConcentrations,
+    summarizeConcentrationDailyPeaks,
+    renderNetworkBlock,
+    renderTechnicalBlock
+  });
 
   const renderCounters = () => {
     const counters = catalog?.counters || [];
@@ -207,7 +330,7 @@
       <label class="counter-option">
         <input type="checkbox" value="${counter.id}" ${index === 0 ? 'checked' : ''}>
         <span>
-          <strong>${String(counter.name || `Счётчик ${counter.id}`).replace(/[&<>"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[char]))}</strong>
+          <strong>${String(counter.name || `Счётчик ${counter.id}`).replace(/[&<>"']/g, (character) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[character]))}</strong>
           <small>${counter.id} · ${formatInt(counter.visits)} визитов · ${counter.from || '—'} — ${counter.to || '—'}</small>
         </span>
       </label>`).join('');
@@ -254,7 +377,7 @@
     const summaries = new Map();
     const unavailable = [];
     await Promise.all(selected.map(async (counter) => {
-      const info = counter.clientIdPeriods;
+      const info = counter.periodMetrics || counter.clientIdPeriods;
       const name = counter.name || `Счётчик ${counter.id}`;
       if (!info || from < info.from || to > info.to || daysBetween(from, to) > Number(info.maxDays || 0)) {
         unavailable.push(name);
@@ -297,7 +420,7 @@
     }
 
     ui.analyze.disabled = true;
-    status(`Загружаю данные и точные ClientID-показатели за выбранный период…`);
+    status('Загружаю данные и точные показатели концентрации за выбранный период…');
 
     try {
       const [payloads, periodData] = await Promise.all([
@@ -327,7 +450,7 @@
         label: `Logs API · ${counterLabel} · ${from} — ${to} · campaign ${campaignFilterLabel()}`,
         generatedAt: catalog.generatedAt
       });
-      patchClientIdBlocks(rows, periodData.summaries, periodData.unavailable);
+      patchMetricBlocks(rows, periodData.summaries, periodData.unavailable);
       status(
         `Готово: ${formatInt(rows.reduce((sum, row) => sum + (Number(row.visits) || 0), 0))} визитов, `
         + `${new Set(rows.map((row) => row.date)).size} дней, ${selected.length} ${selected.length === 1 ? 'счётчик' : 'счётчика'} · campaign ${campaignFilterLabel()}.`,
