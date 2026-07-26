@@ -24,7 +24,6 @@ global.document = {
   querySelectorAll() { return []; },
 };
 global.fetch = async () => ({ ok: false, status: 404 });
-
 global.FraudLab = { analyzeApiRows() {} };
 
 vm.runInThisContext(fs.readFileSync('assets/api-mode.js', 'utf8'), {
@@ -75,27 +74,46 @@ rows.push({
   top10ClientShare: 1,
 });
 
-const summaries = global.FraudLabApiHelpers.summarizeClientIds(rows);
+const period = new Map([
+  ['representative_source', {
+    visits: 9002,
+    clientIdVisits: 9002,
+    coverage: 1,
+    uniqueClientIds: 8102,
+    top1Visits: 30,
+    top1Share: 30 / 9002,
+    top10Visits: 180,
+    top10Share: 180 / 9002,
+    visitsPerClientId: 9002 / 8102,
+    repeatClientVisitShare: 900 / 9002,
+    activeDays: 10,
+    representative: true,
+  }],
+]);
+
+const summaries = global.FraudLabApiHelpers.summarizeClientIds(rows, period);
 const representative = summaries.get('representative_source');
-if (!representative) throw new Error('Representative source summary missing');
-if (representative.representativeDays !== 9) {
-  throw new Error(`Expected 9 representative days, got ${representative.representativeDays}`);
+if (!representative?.period || representative.period.top1Visits !== 30) {
+  throw new Error(`Exact period metrics missing: ${JSON.stringify(representative)}`);
 }
-if (representative.representativeThreshold !== 200) {
-  throw new Error(`Expected threshold 200, got ${representative.representativeThreshold}`);
+if (representative.daily.representativeDays !== 9) {
+  throw new Error(`Expected 9 representative days, got ${representative.daily.representativeDays}`);
 }
-if (representative.maxTop1.date !== '2026-07-04' || representative.maxTop1.value !== 0.05) {
-  throw new Error(`Tiny day distorted top-1 maximum: ${JSON.stringify(representative.maxTop1)}`);
+if (representative.daily.representativeThreshold !== 200) {
+  throw new Error(`Expected threshold 200, got ${representative.daily.representativeThreshold}`);
 }
-if (representative.maxTop10.date !== '2026-07-05' || representative.maxTop10.value !== 0.15) {
-  throw new Error(`Tiny day distorted top-10 maximum: ${JSON.stringify(representative.maxTop10)}`);
+if (representative.daily.maxTop1.date !== '2026-07-04' || representative.daily.maxTop1.value !== 0.05) {
+  throw new Error(`Tiny day distorted top-1 maximum: ${JSON.stringify(representative.daily.maxTop1)}`);
 }
-if (representative.maxTop1.sampleVisits !== 1000) {
-  throw new Error(`Sample size was not preserved: ${JSON.stringify(representative.maxTop1)}`);
+if (representative.daily.maxTop10.date !== '2026-07-05' || representative.daily.maxTop10.value !== 0.15) {
+  throw new Error(`Tiny day distorted top-10 maximum: ${JSON.stringify(representative.daily.maxTop10)}`);
+}
+if (representative.daily.maxTop1.sampleVisits !== 1000) {
+  throw new Error(`Sample size was not preserved: ${JSON.stringify(representative.daily.maxTop1)}`);
 }
 
 const tinyOnly = summaries.get('tiny_only_source');
-if (!tinyOnly || tinyOnly.representativeDays !== 0 || tinyOnly.maxTop1.date !== '') {
+if (!tinyOnly || tinyOnly.daily.representativeDays !== 0 || tinyOnly.daily.maxTop1.date !== '') {
   throw new Error(`Tiny-only source should have no representative maxima: ${JSON.stringify(tinyOnly)}`);
 }
 
