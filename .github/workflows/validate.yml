@@ -21,12 +21,14 @@ jobs:
           node --check scripts/validate_api_runtime.js
           node --check scripts/validate_clientid_representative.js
           node --check scripts/validate_mi_extensions.js
+          node --check scripts/validate_cookie_methodology.js
 
       - name: Run API analysis runtime test
         run: |
           node scripts/validate_api_runtime.js
           node scripts/validate_clientid_representative.js
           node scripts/validate_mi_extensions.js
+          node scripts/validate_cookie_methodology.js
 
       - name: Check visit-risk UI integration
         run: |
@@ -87,6 +89,21 @@ jobs:
           grep -q "MI extension validation passed" scripts/validate_mi_extensions.js
           grep -q "warning-table" assets/api.css
           grep -q "behavior-grid" assets/api.css
+
+      - name: Check cookie methodology v4
+        run: |
+          grep -q "renderCookieClientTable" assets/api-mode.js
+          grep -q "Доля визитов с полученным ClientID" assets/api-mode.js
+          grep -q "Интерпретация общей уникальности ограничена" assets/api-mode.js
+          grep -q "Качество технических данных и поведение" assets/api-mode.js
+          grep -q "Пересечения технических признаков" assets/api-mode.js
+          grep -q "Обычный день и пик" assets/api-mode.js
+          grep -q "mobile/tablet-визитов" assets/api-mode.js
+          grep -q "Cookie methodology UI validation passed" scripts/validate_cookie_methodology.js
+          grep -q "Cookie methodology v4" assets/api.css
+          test ! -f scripts/apply_cookie_ui_v4.py
+          test ! -f .github/workflows/apply-cookie-ui-v4.yml
+          test ! -f scripts/.cookie-ui-v4-trigger
 
       - name: Check API controls and campaign filter
         run: |
