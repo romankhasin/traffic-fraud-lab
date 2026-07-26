@@ -36,9 +36,10 @@ jobs:
           grep -q "Пересечения технических признаков" assets/api-mode.js
           grep -q "Cookie methodology v4" assets/api.css
 
-      - name: Restore temporary migration files
+      - name: Restore temporary and protected workflow files
         run: |
           git checkout HEAD -- .github/workflows/apply-cookie-ui-v4.yml
+          git checkout HEAD -- .github/workflows/validate.yml
           git checkout HEAD -- scripts/apply_cookie_ui_v4.py
           git checkout HEAD -- scripts/.cookie-ui-v4-trigger
 
