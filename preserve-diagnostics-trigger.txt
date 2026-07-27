@@ -1,0 +1,1 @@
+Preserve existing IP/subnet, ClientID and technical drill-down cards while hiding legacy score.
