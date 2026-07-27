@@ -1,2 +1,0 @@
-Apply focused preservation patch for IP, subnet, ClientID and technical diagnostic cards.
-Pull-request workflow retry: 2026-07-27.
