@@ -1,1 +1,2 @@
 Preserve existing IP/subnet, ClientID and technical drill-down cards while hiding legacy score.
+Retry: 2026-07-27.
