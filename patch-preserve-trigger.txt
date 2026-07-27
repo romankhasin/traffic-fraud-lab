@@ -1,2 +1,2 @@
 Apply focused preservation patch for IP, subnet, ClientID and technical diagnostic cards.
-Merge-triggered run: 2026-07-27.
+Pull-request workflow run: 2026-07-27.
