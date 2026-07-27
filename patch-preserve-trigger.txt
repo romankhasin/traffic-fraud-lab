@@ -1,0 +1,1 @@
+Apply focused preservation patch for IP, subnet, ClientID and technical diagnostic cards.
