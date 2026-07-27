@@ -23,13 +23,10 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
+
           path = Path('assets/methodology-v1.js')
           text = path.read_text(encoding='utf-8')
-          old = '''  function hideLegacyOutputs(results) {
-            for (const section of results.querySelectorAll('.results-subsection')) section.hidden = true;
-            const sourceList = results.querySelector('#source-list');
-            if (sourceList) sourceList.hidden = true;
-          }'''
           new = '''  function hideLegacyOutputs(results) {
             for (const section of results.querySelectorAll('.results-subsection')) section.hidden = true;
             const sourceList = results.querySelector('#source-list');
@@ -61,12 +58,16 @@ jobs:
               }
             }
           }'''
+
           if 'support-diagnostics-head' not in text:
-              if old not in text:
-                  raise SystemExit('legacy hideLegacyOutputs block not found')
-              text = text.replace(old, new)
+              pattern = r"  function hideLegacyOutputs\(results\) \{.*?\n  \}\n\n  function updateMethodologyCopy"
+              replacement = new + '\n\n  function updateMethodologyCopy'
+              text, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f'hideLegacyOutputs replacement count: {count}')
               support_css = '.support-diagnostics-head{margin:34px 0 14px}.support-diagnostics-head h2{margin:5px 0 8px}.support-diagnostics-head p{margin:0;max-width:900px;color:#666}.methodology-support-list{display:grid!important;gap:14px}.methodology-support-card summary{background:#fff}.methodology-support-card .source-body{background:#fff}'
-              text = text.replace('@media(max-width:900px)', support_css + '@media(max-width:900px)', 1)
+              if '.support-diagnostics-head{' not in text:
+                  text = text.replace('@media(max-width:900px)', support_css + '@media(max-width:900px)', 1)
               path.write_text(text, encoding='utf-8')
           PY
           node --check assets/methodology-v1.js
