@@ -1,10 +1,9 @@
 name: Patch preserved diagnostics
 
 on:
-  push:
-    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
     paths:
-      - .github/workflows/patch-preserve-diagnostics.yml
       - patch-preserve-trigger.txt
   workflow_dispatch:
 
@@ -13,9 +12,12 @@ permissions:
 
 jobs:
   patch:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
       - name: Preserve detailed cards and remove legacy score UI
         shell: bash
         run: |
@@ -69,7 +71,7 @@ jobs:
           PY
           node --check assets/methodology-v1.js
           grep -q 'support-diagnostics-head' assets/methodology-v1.js
-      - name: Commit patch
+      - name: Commit patch to pull request branch
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -80,4 +82,4 @@ jobs:
             exit 0
           fi
           git commit -m "Preserve detailed fraud diagnostics in methodology view"
-          git push
+          git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }}
