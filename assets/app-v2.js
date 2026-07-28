@@ -1138,7 +1138,7 @@
 
     ui.kpis.innerHTML = [
       ['Всего визитов', formatInt(totalVisits), `${state.results.length} источников`],
-      [state.dataMode === 'api' ? 'Подозрительные визиты' : 'Визиты в аномальные дни', formatInt(flaggedVisits), formatPct(totalVisits ? flaggedVisits / totalVisits : 0) + (state.dataMode === 'api' ? ' получили сочетание признаков' : ' трафика')],
+      [state.dataMode === 'api' ? 'Явные признаки' : 'Визиты в аномальные дни', formatInt(flaggedVisits), formatPct(totalVisits ? flaggedVisits / totalVisits : 0) + (state.dataMode === 'api' ? ' получили сочетание признаков' : ' трафика')],
       ['Аномальные дни', formatInt(anomalousDays.length), `${highDays.length} высокого риска`],
       ['Источники высокого риска', formatInt(highSources.length), 'по периоду и дням'],
       ['Средний отказ', formatPct(base.bounce), 'по всей базе'],
@@ -1270,17 +1270,17 @@
           <div><strong>${formatInt(row.visits)}</strong><span>визиты</span></div>
           <div><strong>${row.days.length}</strong><span>дней в базе</span></div>
           <div><strong>${row.anomalousDays.length}</strong><span>аномальных дней</span></div>
-          <div><strong>${formatInt(row.anomalousDays.reduce((sum, day) => sum + day.flaggedVisits, 0))}</strong><span>${state.dataMode === 'api' ? 'подозрительные визиты' : 'визиты под проверкой'}</span></div>
+          <div><strong>${formatInt(row.anomalousDays.reduce((sum, day) => sum + day.flaggedVisits, 0))}</strong><span>${state.dataMode === 'api' ? 'явные признаки' : 'визиты под проверкой'}</span></div>
           <div><strong>${formatPct(row.metrics.bounce)}</strong><span>отказы</span></div>
           <div><strong>${escapeHtml(row.confidence)}</strong><span>уверенность</span></div>
         </div>
-        <section class="daily-detail"><h4>Конкретные аномальные даты</h4><div class="table-wrap mini-table-wrap"><table class="mini-table"><thead><tr><th>Дата</th><th>Визиты</th><th>Подозр.</th><th>Отказы</th><th>Время</th><th>ClientID: уник. / топ-1</th><th>Score</th><th>Причины</th></tr></thead><tbody>${dailyRows}</tbody></table></div></section>
+        <section class="daily-detail"><h4>Конкретные аномальные даты</h4><div class="table-wrap mini-table-wrap"><table class="mini-table"><thead><tr><th>Дата</th><th>Визиты</th><th>Признаки</th><th>Отказы</th><th>Время</th><th>ClientID: уник. / топ-1</th><th>Score</th><th>Причины</th></tr></thead><tbody>${dailyRows}</tbody></table></div></section>
         <div class="detail-grid">
           <section class="detail detail--wide"><h4>Как сформирован score</h4>${renderScoreBreakdown(row)}</section>
           <section class="detail"><h4>${ipTitle}</h4><p><b>Топ IP:</b> ${escapeHtml(maskIp(row.topIp.key))} · ${formatPct(row.topIp.share)}</p><p><b>Топ подсеть:</b> ${escapeHtml(row.topSubnet.key)} · ${formatPct(row.topSubnet.share)}</p></section>
           <section class="detail"><h4>${techTitle}</h4><p><b>Топ браузер:</b> ${escapeHtml(row.topBrowser.key)} · ${formatPct(row.topBrowser.share)}</p><p><b>Топ связка:</b> ${escapeHtml(shorten(row.topProfile.key, 100))} · ${formatPct(row.topProfile.share)}</p></section>
           <section class="detail"><h4>${clientTitle}</h4>${row.clientIdVisits ? `<p><b>Покрытие:</b> ${formatPct(row.clientIdCoverage)}</p><p><b>${uniqueClientLabel}:</b> ${formatInt(row.uniqueClientIds)}</p><p><b>${visitsPerClientLabel}:</b> ${row.visitsPerClientId.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p><p><b>Макс. топ-1 / топ-10:</b> ${formatPct(row.topClientId.share)} / ${formatPct(row.top10ClientShare)}</p>` : '<p>ClientID не найден в выбранных данных.</p>'}</section>
-          ${state.dataMode === 'api' ? `<section class="detail detail--visit-risk"><h4>Оценка конкретных визитов</h4>${visitRisk ? `<p><b>Высокий риск:</b> ${formatInt(visitRisk.highRiskVisits)}</p><p><b>Требуют проверки:</b> ${formatInt(visitRisk.reviewVisits)}</p><p><b>Всего подозрительных:</b> ${formatInt(visitRisk.suspiciousVisits)} · ${formatPct(visitRisk.suspiciousShare)}</p><p><b>Надёжность:</b> ${escapeHtml(visitRisk.confidence)}</p><p>${escapeHtml(visitRisk.comment)}</p>${visitRiskReasons}` : '<p>Для выбранных аномальных дней классификация визитов ещё не рассчитана.</p>'}</section>` : ''}
+          ${state.dataMode === 'api' ? `<section class="detail detail--visit-risk"><h4>Оценка конкретных визитов</h4>${visitRisk ? `<p><b>Высокий риск:</b> ${formatInt(visitRisk.highRiskVisits)}</p><p><b>Требуют проверки:</b> ${formatInt(visitRisk.reviewVisits)}</p><p><b>Всего с признаками:</b> ${formatInt(visitRisk.suspiciousVisits)} · ${formatPct(visitRisk.suspiciousShare)}</p><p><b>Надёжность:</b> ${escapeHtml(visitRisk.confidence)}</p><p>${escapeHtml(visitRisk.comment)}</p>${visitRiskReasons}` : '<p>Для выбранных аномальных дней классификация визитов ещё не рассчитана.</p>'}</section>` : ''}
           <section class="detail"><h4>Покрытие</h4><p><b>Техническая выгрузка:</b> ${formatInt(row.tech.visits)} визитов</p><p><b>IP-выгрузка:</b> ${formatInt(row.ip.visits)} визитов</p><p><b>Дней:</b> ${row.days.length}</p></section>
           <section class="detail detail--action"><h4>Рекомендация</h4><p>${escapeHtml(row.action)}</p></section>
         </div>

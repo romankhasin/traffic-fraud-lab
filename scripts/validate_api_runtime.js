@@ -187,7 +187,7 @@ if (getElement('#results').hidden) throw new Error('Results remained hidden');
 if (!getElement('#kpi-grid').innerHTML.includes('Logs API')) throw new Error('API KPI was not rendered');
 if (!getElement('#source-list').innerHTML.includes('Оценка конкретных визитов')) throw new Error('Visit-level risk summary was not rendered');
 if (!getElement('#source-list').innerHTML.includes('повторные визиты одного ClientID')) throw new Error('Visit-level reason was not rendered');
-if (!getElement('#kpi-grid').innerHTML.includes('Подозрительные визиты')) throw new Error('Refined suspicious visits KPI was not rendered');
+if (!getElement('#kpi-grid').innerHTML.includes('Явные признаки')) throw new Error('Refined suspicious visits KPI was not rendered');
 if (!getElement('#summary-text').textContent.includes('Runtime test')) throw new Error('API context was not rendered');
 
 console.log(`Fraud API runtime validation passed: ${result.sources} sources, ${result.days} days`);
